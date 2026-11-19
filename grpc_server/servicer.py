@@ -143,12 +143,11 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                         user_id = init.user_id
                         auth_token = init.auth_token
 
-                        # Extract client configuration (modalities, voice, custom instructions)
+                        # Modalities come from client (default AUDIO); voice and instructions come from FastAPI config
                         response_modalities = (
-                            list(init.response_modalities) if init.response_modalities else None
+                            list(init.response_modalities) if init.response_modalities else ["AUDIO"]
                         )
-                        voice_name = init.voice_name or "Puck"
-                        custom_instructions = init.system_instructions or None
+                        voice_name = settings.GEMINI_VOICE_NAME
 
                         logger.info(
                             f"[gRPC] SessionInit: session_id={session_id}, user_id={user_id}, "
@@ -170,11 +169,11 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                             profile_task, history_task, resume_handle_task
                         )
 
-                        # 2. Build personalized system instruction
+                        # 2. Build system instruction from FastAPI config and user profile
                         system_instruction = build_chat_system_instruction(
                             user_profile=user_profile,
                             conversation_history=prior_messages,
-                            custom_instruction=custom_instructions,
+                            custom_instruction=settings.DEFAULT_SYSTEM_INSTRUCTION,
                         )
 
                         # 3. Instantiate and connect Gemini Live session

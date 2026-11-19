@@ -45,12 +45,14 @@ class Settings(BaseSettings):
     ENABLE_FILE_LOGGING: bool = False
     ENABLE_CONSOLE_LOGGING: bool = True
 
-    # Gemini Models & Keys
+    # Gemini Models, Voice & Keys
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: Optional[str] = None
     GEMINI_TEXT_MODEL: str = "gemini-3.5-flash-lite"
     GEMINI_AUDIO_MODEL: str = "gemini-2.5-flash-native-audio-latest"
     GEMINI_DISTRESS_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_VOICE_NAME: str = "Puck"
+    DEFAULT_SYSTEM_INSTRUCTION: str = "You are a Therapist"
     DISTRESS_API_KEY: Optional[str] = None
 
     @field_validator("DEBUG", mode="before")

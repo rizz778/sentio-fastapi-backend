@@ -7,8 +7,6 @@ from pydantic import ValidationError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 import structlog
 
-from api.deps import initialize_dependencies
-from api.router import api_router
 from core.config import settings
 from core.exceptions import AppException
 from core.handlers import (
@@ -24,16 +22,15 @@ from grpc_server import start_grpc_server, stop_grpc_server
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    await initialize_dependencies()
-    
+
     # Start SentioLiveGateway gRPC server
     try:
         await start_grpc_server()
     except Exception as e:
         structlog.get_logger(__name__).error("Failed to start gRPC server", error=str(e))
-        
+
     yield
-    
+
     # Graceful shutdown of gRPC server
     await stop_grpc_server(grace=3.0)
 
@@ -80,3 +77,18 @@ async def add_request_id(request: Request, call_next):
     return response
 
 
+@app.get("/health", tags=["Health"])
+async def health_check():
+    return {
+        "status": "healthy",
+        "service": "sentio-ai-engine",
+        "grpc_port": settings.GRPC_PORT,
+    }
+
+
+@app.get("/", tags=["Root"])
+async def root():
+    return {
+        "message": "Sentio AI Engine Backend is active",
+        "grpc": f"{settings.GRPC_HOST}:{settings.GRPC_PORT}",
+    }

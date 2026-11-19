@@ -56,14 +56,14 @@ class GeminiLiveSession:
 
     async def connect(
         self,
-        system_instruction: str,
-        voice_name: str = "Puck",
+        system_instruction: Optional[str] = None,
+        voice_name: Optional[str] = None,
         response_modalities: Optional[List[str]] = None,
         resume_handle: Optional[str] = None,
     ) -> None:
         """
-        Opens the Gemini Live session with the client-specified modalities (default AUDIO),
-        voice name, system instruction, and optional resume handle.
+        Opens the Gemini Live session with the client-specified modalities (default AUDIO).
+        Voice name and base system instruction fall back to FastAPI backend settings.
         Fetches updated conversation history directly from Redis.
         """
         if not self.api_key:
@@ -75,13 +75,15 @@ class GeminiLiveSession:
         )
 
         modalities = [m.upper() for m in response_modalities] if response_modalities else ["AUDIO"]
+        selected_voice = voice_name or getattr(settings, "GEMINI_VOICE_NAME", "Puck")
+        effective_instruction = system_instruction or getattr(settings, "DEFAULT_SYSTEM_INSTRUCTION", "You are a Therapist")
 
         speech_config = None
         if "AUDIO" in modalities:
             speech_config = types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name=voice_name
+                        voice_name=selected_voice
                     )
                 )
             )
@@ -91,7 +93,7 @@ class GeminiLiveSession:
             response_modalities=modalities,
             speech_config=speech_config,
             system_instruction=types.Content(
-                parts=[types.Part.from_text(text=system_instruction)]
+                parts=[types.Part.from_text(text=effective_instruction)]
             ),
             enable_affective_dialog=True,
             input_audio_transcription=types.AudioTranscriptionConfig(),
