@@ -6,6 +6,7 @@ python-dotenv>=1.0.0
 pydantic>=2.10.0
 pydantic-settings>=2.7.0
 httpx>=0.28.0
+redis>=5.0.0
 
 # gRPC & Protobuf
 grpcio>=1.85.0

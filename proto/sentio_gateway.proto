@@ -54,6 +54,7 @@ message ServerEvent {
     StopPlayback stop_playback = 4;
     ServerPong pong = 5;
     GatewayError error = 6;
+    DistressUpdate distress_update = 7;
   }
 }
 
@@ -87,6 +88,13 @@ message StopPlayback {
 // ServerPong keepalive response
 message ServerPong {
   int64 timestamp_ms = 1;
+}
+
+// DistressUpdate streams real-time emotional analysis and distress telemetry to client
+message DistressUpdate {
+  float score = 1;
+  string emotion = 2;
+  int64 timestamp_ms = 3;
 }
 
 // GatewayError communicates error states

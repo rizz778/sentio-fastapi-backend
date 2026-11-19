@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     GRPC_HOST: str = "0.0.0.0"
     GRPC_PORT: int = 50051
 
+    # Redis & Upstream Service Settings
+    REDIS_URL: str = "redis://localhost:6379"
+    NODE_BACKEND_URL: str = "http://localhost:5000"
+
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
