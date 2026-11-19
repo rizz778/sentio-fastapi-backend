@@ -4,7 +4,7 @@ from typing import Any
 import structlog
 from pythonjsonlogger import jsonlogger
 from .config import settings
-# Elastic APM will be imported conditionally when ELASTIC_APM_ENABLED is True
+
 
 def setup_logging() -> None:
     # Set up root logger
@@ -35,7 +35,7 @@ def setup_logging() -> None:
             processors.append(structlog.processors.JSONRenderer())
         else:
             processors.append(structlog.dev.ConsoleRenderer())
-        
+
         root_logger.addHandler(console_handler)
 
     # File logging
@@ -47,21 +47,6 @@ def setup_logging() -> None:
         file_handler.setFormatter(file_formatter)
         root_logger.addHandler(file_handler)
 
-    # Elastic APM logging
-    if settings.ELASTIC_APM_ENABLED:
-        try:
-            import elasticapm
-            elasticapm.instrument()
-            client = elasticapm.Client(
-                service_name=settings.ELASTIC_APM_SERVICE_NAME,
-                server_url=settings.ELASTIC_APM_SERVER_URL,
-                environment=settings.ELASTIC_APM_ENVIRONMENT
-            )
-            # apm_handler = elasticapm.handlers.logging.ElasticAPMHandler(client=client)
-            # root_logger.addHandler(apm_handler)
-        except ImportError:
-            root_logger.warning("elasticapm package is not installed; skipping Elastic APM initialization.")
-
     # Configure structlog
     structlog.configure(
         processors=processors,
@@ -71,8 +56,10 @@ def setup_logging() -> None:
         cache_logger_on_first_use=True,
     )
 
+
 def get_logger(name: str) -> Any:
     return structlog.get_logger(name)
+
 
 def get_request_id() -> str:
     return structlog.contextvars.get_contextvars().get("request_id", "unknown")
