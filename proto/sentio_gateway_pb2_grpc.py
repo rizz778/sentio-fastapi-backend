@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import sentio_gateway_pb2 as sentio__gateway__pb2
+from proto import sentio_gateway_pb2 as proto_dot_sentio__gateway__pb2
 
 GRPC_GENERATED_VERSION = '1.85.3'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in sentio_gateway_pb2_grpc.py depends on'
+        + ' but the generated code in proto/sentio_gateway_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -37,8 +37,8 @@ class SentioLiveGatewayStub:
         """
         self.StreamSession = channel.stream_stream(
                 '/sentio.gateway.SentioLiveGateway/StreamSession',
-                request_serializer=sentio__gateway__pb2.ClientEvent.SerializeToString,
-                response_deserializer=sentio__gateway__pb2.ServerEvent.FromString,
+                request_serializer=proto_dot_sentio__gateway__pb2.ClientEvent.SerializeToString,
+                response_deserializer=proto_dot_sentio__gateway__pb2.ServerEvent.FromString,
                 _registered_method=True)
 
 
@@ -58,8 +58,8 @@ def add_SentioLiveGatewayServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'StreamSession': grpc.stream_stream_rpc_method_handler(
                     servicer.StreamSession,
-                    request_deserializer=sentio__gateway__pb2.ClientEvent.FromString,
-                    response_serializer=sentio__gateway__pb2.ServerEvent.SerializeToString,
+                    request_deserializer=proto_dot_sentio__gateway__pb2.ClientEvent.FromString,
+                    response_serializer=proto_dot_sentio__gateway__pb2.ServerEvent.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -88,8 +88,8 @@ class SentioLiveGateway:
             request_iterator,
             target,
             '/sentio.gateway.SentioLiveGateway/StreamSession',
-            sentio__gateway__pb2.ClientEvent.SerializeToString,
-            sentio__gateway__pb2.ServerEvent.FromString,
+            proto_dot_sentio__gateway__pb2.ClientEvent.SerializeToString,
+            proto_dot_sentio__gateway__pb2.ServerEvent.FromString,
             options,
             channel_credentials,
             insecure,

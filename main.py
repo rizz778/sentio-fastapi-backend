@@ -80,5 +80,3 @@ async def add_request_id(request: Request, call_next):
     return response
 
 
-# Include consolidated API router (HTTP + WebSocket)
-app.include_router(api_router)

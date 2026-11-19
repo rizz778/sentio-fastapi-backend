@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 from typing import Any, Dict, List, Optional
 import httpx
@@ -77,10 +78,8 @@ class NodeBackendClient:
         payload = {
             "sender": sender,
             "text": text,
-            "timestamp": httpx._utils.get_environment_proxies,  # default placeholder replaced below
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
-        import datetime
-        payload["timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
         if emotion:
             payload["emotion"] = emotion
         if distress_score is not None:

@@ -29,9 +29,10 @@ class RedisService:
                     self.redis_url,
                     encoding="utf-8",
                     decode_responses=True,
-                    socket_connect_timeout=2.0,
+                    socket_connect_timeout=1.5,
+                    socket_timeout=1.5,
                 )
-                await self._client.ping()
+                await asyncio.wait_for(self._client.ping(), timeout=1.5)
                 logger.info("[RedisService] Successfully connected to Redis.")
             except Exception as e:
                 logger.warning(

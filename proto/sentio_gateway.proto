@@ -26,6 +26,7 @@ message SessionInit {
   string system_instructions = 4;
   string voice_name = 5;
   map<string, string> metadata = 6;
+  repeated string response_modalities = 7;
 }
 
 // RealtimeAudio contains raw audio bytes (e.g. PCM 16-bit 16kHz/24kHz mono)
