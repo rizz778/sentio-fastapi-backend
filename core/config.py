@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     API_PREFIX: str = "/api"
 
+    # gRPC Settings
+    GRPC_HOST: str = "0.0.0.0"
+    GRPC_PORT: int = 50051
+
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

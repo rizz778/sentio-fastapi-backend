@@ -7,6 +7,11 @@ pydantic>=2.10.0
 pydantic-settings>=2.7.0
 httpx>=0.28.0
 
+# gRPC & Protobuf
+grpcio>=1.85.0
+grpcio-tools>=1.85.0
+protobuf>=5.29.0
+
 # Google GenAI SDK (Gemini Live & Multimodal)
 google-genai>=1.0.0
 

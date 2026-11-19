@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package sentio.gateway;
+
+// SentioLiveGateway provides bidirectional streaming between Gateway and AI Engine (FastAPI)
+service SentioLiveGateway {
+  // Bidirectional stream for real-time speech and context exchange
+  rpc StreamSession(stream ClientEvent) returns (stream ServerEvent);
+}
+
+// ClientEvent represents messages originating from the user / client through the Gateway to FastAPI
+message ClientEvent {
+  oneof payload {
+    SessionInit session_init = 1;
+    RealtimeAudio audio_chunk = 2;
+    ClientInterrupt interrupt = 3;
+    ClientPing ping = 4;
+  }
+}
+
+// SessionInit initializes or re-attaches to an ongoing session
+message SessionInit {
+  string session_id = 1;
+  string user_id = 2;
+  string auth_token = 3;
+  string system_instructions = 4;
+  string voice_name = 5;
+  map<string, string> metadata = 6;
+}
+
+// RealtimeAudio contains raw audio bytes (e.g. PCM 16-bit 16kHz/24kHz mono)
+message RealtimeAudio {
+  bytes data = 1;
+  string mime_type = 2; // e.g. "audio/pcm;rate=16000"
+}
+
+// ClientInterrupt triggers barge-in (cancellation of current AI audio output)
+message ClientInterrupt {
+  int64 timestamp_ms = 1;
+  string reason = 2;
+}
+
+// ClientPing keepalive probe
+message ClientPing {
+  int64 timestamp_ms = 1;
+}
+
+// ServerEvent represents messages flowing from FastAPI/Gemini Live to the Gateway and client
+message ServerEvent {
+  oneof payload {
+    SessionReady session_ready = 1;
+    RealtimeAudio audio_chunk = 2;
+    Transcript transcript = 3;
+    StopPlayback stop_playback = 4;
+    ServerPong pong = 5;
+    GatewayError error = 6;
+  }
+}
+
+// SessionReady confirms session initialization or successful rehydration
+message SessionReady {
+  string session_id = 1;
+  int32 prior_turn_count = 2;
+  bool rehydrated = 3;
+  string message = 4;
+}
+
+// Transcript provides real-time transcription
+message Transcript {
+  enum Speaker {
+    SPEAKER_UNSPECIFIED = 0;
+    USER = 1;
+    MODEL = 2;
+  }
+  Speaker speaker = 1;
+  string text = 2;
+  bool is_final = 3;
+  int64 timestamp_ms = 4;
+}
+
+// StopPlayback instructs client to flush its audio buffer immediately (barge-in)
+message StopPlayback {
+  int64 timestamp_ms = 1;
+  string reason = 2;
+}
+
+// ServerPong keepalive response
+message ServerPong {
+  int64 timestamp_ms = 1;
+}
+
+// GatewayError communicates error states
+message GatewayError {
+  enum ErrorCode {
+    UNKNOWN = 0;
+    UNAUTHENTICATED = 1;
+    SESSION_EXPIRED = 2;
+    AI_SERVICE_UNAVAILABLE = 3;
+    RATE_LIMITED = 4;
+    INTERNAL_ERROR = 5;
+  }
+  ErrorCode code = 1;
+  string message = 2;
+  bool recoverable = 3;
+}

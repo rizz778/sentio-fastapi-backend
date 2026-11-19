@@ -18,13 +18,24 @@ from core.handlers import (
 )
 from core.json import custom_jsonable_encoder
 from core.logging import setup_logging
+from grpc_server import start_grpc_server, stop_grpc_server
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
     await initialize_dependencies()
+    
+    # Start SentioLiveGateway gRPC server
+    try:
+        await start_grpc_server()
+    except Exception as e:
+        structlog.get_logger(__name__).error("Failed to start gRPC server", error=str(e))
+        
     yield
+    
+    # Graceful shutdown of gRPC server
+    await stop_grpc_server(grace=3.0)
 
 
 class CustomJSONResponse(JSONResponse):
@@ -33,8 +44,8 @@ class CustomJSONResponse(JSONResponse):
 
 
 app = FastAPI(
-    title="Mental System Backend",
-    description="Backend API for Eduviva",
+    title="Sentio AI Engine Backend",
+    description="Multimodal Emotion & Voice AI Backend for Sentio",
     version="1.0.0",
     lifespan=lifespan,
     default_response_class=CustomJSONResponse,
@@ -59,7 +70,8 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
-    request_id = str(uuid.uuid4())
+    # Prefer correlation ID from gateway if provided
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
     request.state.request_id = request_id
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(request_id=request_id)
