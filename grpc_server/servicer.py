@@ -11,6 +11,7 @@ from services.gemini_live_service import GeminiLiveSession
 from services.redis_service import redis_service
 from services.node_client import node_client
 from services.turn_processor import turn_processor
+from services.emotion_service import emotion_service
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +235,21 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                         )
                         await outbound_queue.put(pong_event)
 
+                    elif payload_field == "video_frame":
+                        video_frame = client_event.video_frame
+                        if video_frame.data and user_id:
+                            # Asynchronously process video frame via hosted vision model without blocking audio stream
+                            asyncio.create_task(
+                                self._handle_video_frame(
+                                    session_id=session_id,
+                                    user_id=user_id,
+                                    frame_data=video_frame.data,
+                                    mime_type=video_frame.mime_type or "image/jpeg",
+                                    gemini_session=gemini_session,
+                                    outbound_queue=outbound_queue,
+                                )
+                            )
+
                     else:
                         logger.warning(f"[gRPC] Unhandled client payload: {payload_field}")
 
@@ -277,6 +293,9 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
             if gemini_session:
                 await gemini_session.close()
 
+            if session_id:
+                emotion_service.cleanup_session(session_id)
+
             logger.info(f"[gRPC] StreamSession terminated for session={session_id}")
 
     async def _resolve_user_profile(
@@ -310,3 +329,46 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                 await redis_service.push_sliding_message(session_id, msg)
             return messages[-5:]
         return []
+
+    async def _handle_video_frame(
+        self,
+        session_id: str,
+        user_id: str,
+        frame_data: bytes,
+        mime_type: str,
+        gemini_session: Optional[GeminiLiveSession],
+        outbound_queue: asyncio.Queue,
+    ) -> None:
+        """
+        Runs hosted async Gemini Flash emotion recognition, caches running emotion to Redis,
+        injects context cue into Gemini Live if emotion shifted,
+        and pushes real-time DistressUpdate to Gateway/client dashboard.
+        """
+        try:
+            current_emotion, aggregated_emotion = await emotion_service.analyze_frame_bytes_async(
+                frame_data, mime_type=mime_type, session_id=session_id
+            )
+
+            # Check previous running emotion to detect shifts
+            prev_emotion_data = await redis_service.get_user_emotion(user_id)
+            prev_emotion = prev_emotion_data.get("emotion") if prev_emotion_data else None
+
+            # Always update Redis with latest smoothed running emotion
+            await redis_service.set_user_emotion(user_id, aggregated_emotion)
+
+            # If user emotion shifted, silently cue Gemini Live to adapt vocal empathy
+            if prev_emotion and prev_emotion != aggregated_emotion and gemini_session:
+                await gemini_session.inject_emotion_context(aggregated_emotion)
+
+            # Push real-time emotion telemetry to client dashboard
+            telemetry_event = pb2.ServerEvent(
+                distress_update=pb2.DistressUpdate(
+                    score=0.0,
+                    emotion=aggregated_emotion,
+                    timestamp_ms=int(time.time() * 1000),
+                )
+            )
+            await outbound_queue.put(telemetry_event)
+
+        except Exception as e:
+            logger.warning(f"[gRPC] Error handling video frame for session={session_id}: {e}")

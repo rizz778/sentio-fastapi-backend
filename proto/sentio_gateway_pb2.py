@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1aproto/sentio_gateway.proto\x12\x0esentio.gateway\"\xe5\x01\n\x0b\x43lientEvent\x12\x33\n\x0csession_init\x18\x01 \x01(\x0b\x32\x1b.sentio.gateway.SessionInitH\x00\x12\x34\n\x0b\x61udio_chunk\x18\x02 \x01(\x0b\x32\x1d.sentio.gateway.RealtimeAudioH\x00\x12\x34\n\tinterrupt\x18\x03 \x01(\x0b\x32\x1f.sentio.gateway.ClientInterruptH\x00\x12*\n\x04ping\x18\x04 \x01(\x0b\x32\x1a.sentio.gateway.ClientPingH\x00\x42\t\n\x07payload\"\x82\x02\n\x0bSessionInit\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x12\n\nauth_token\x18\x03 \x01(\t\x12\x1b\n\x13system_instructions\x18\x04 \x01(\t\x12\x12\n\nvoice_name\x18\x05 \x01(\t\x12;\n\x08metadata\x18\x06 \x03(\x0b\x32).sentio.gateway.SessionInit.MetadataEntry\x12\x1b\n\x13response_modalities\x18\x07 \x03(\t\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"0\n\rRealtimeAudio\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\x11\n\tmime_type\x18\x02 \x01(\t\"7\n\x0f\x43lientInterrupt\x12\x14\n\x0ctimestamp_ms\x18\x01 \x01(\x03\x12\x0e\n\x06reason\x18\x02 \x01(\t\"\"\n\nClientPing\x12\x14\n\x0ctimestamp_ms\x18\x01 \x01(\x03\"\x84\x03\n\x0bServerEvent\x12\x35\n\rsession_ready\x18\x01 \x01(\x0b\x32\x1c.sentio.gateway.SessionReadyH\x00\x12\x34\n\x0b\x61udio_chunk\x18\x02 \x01(\x0b\x32\x1d.sentio.gateway.RealtimeAudioH\x00\x12\x30\n\ntranscript\x18\x03 \x01(\x0b\x32\x1a.sentio.gateway.TranscriptH\x00\x12\x35\n\rstop_playback\x18\x04 \x01(\x0b\x32\x1c.sentio.gateway.StopPlaybackH\x00\x12*\n\x04pong\x18\x05 \x01(\x0b\x32\x1a.sentio.gateway.ServerPongH\x00\x12-\n\x05\x65rror\x18\x06 \x01(\x0b\x32\x1c.sentio.gateway.GatewayErrorH\x00\x12\x39\n\x0f\x64istress_update\x18\x07 \x01(\x0b\x32\x1e.sentio.gateway.DistressUpdateH\x00\x42\t\n\x07payload\"a\n\x0cSessionReady\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x18\n\x10prior_turn_count\x18\x02 \x01(\x05\x12\x12\n\nrehydrated\x18\x03 \x01(\x08\x12\x0f\n\x07message\x18\x04 \x01(\t\"\xb0\x01\n\nTranscript\x12\x33\n\x07speaker\x18\x01 \x01(\x0e\x32\".sentio.gateway.Transcript.Speaker\x12\x0c\n\x04text\x18\x02 \x01(\t\x12\x10\n\x08is_final\x18\x03 \x01(\x08\x12\x14\n\x0ctimestamp_ms\x18\x04 \x01(\x03\"7\n\x07Speaker\x12\x17\n\x13SPEAKER_UNSPECIFIED\x10\x00\x12\x08\n\x04USER\x10\x01\x12\t\n\x05MODEL\x10\x02\"4\n\x0cStopPlayback\x12\x14\n\x0ctimestamp_ms\x18\x01 \x01(\x03\x12\x0e\n\x06reason\x18\x02 \x01(\t\"\"\n\nServerPong\x12\x14\n\x0ctimestamp_ms\x18\x01 \x01(\x03\"F\n\x0e\x44istressUpdate\x12\r\n\x05score\x18\x01 \x01(\x02\x12\x0f\n\x07\x65motion\x18\x02 \x01(\t\x12\x14\n\x0ctimestamp_ms\x18\x03 \x01(\x03\"\xf1\x01\n\x0cGatewayError\x12\x34\n\x04\x63ode\x18\x01 \x01(\x0e\x32&.sentio.gateway.GatewayError.ErrorCode\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x13\n\x0brecoverable\x18\x03 \x01(\x08\"\x84\x01\n\tErrorCode\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x13\n\x0fUNAUTHENTICATED\x10\x01\x12\x13\n\x0fSESSION_EXPIRED\x10\x02\x12\x1a\n\x16\x41I_SERVICE_UNAVAILABLE\x10\x03\x12\x10\n\x0cRATE_LIMITED\x10\x04\x12\x12\n\x0eINTERNAL_ERROR\x10\x05\x32\x62\n\x11SentioLiveGateway\x12M\n\rStreamSession\x12\x1b.sentio.gateway.ClientEvent\x1a\x1b.sentio.gateway.ServerEvent(\x01\x30\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1aproto/sentio_gateway.proto\x12\x0esentio.gateway\"\x98\x02\n\x0b\x43lientEvent\x12\x33\n\x0csession_init\x18\x01 \x01(\x0b\x32\x1b.sentio.gateway.SessionInitH\x00\x12\x34\n\x0b\x61udio_chunk\x18\x02 \x01(\x0b\x32\x1d.sentio.gateway.RealtimeAudioH\x00\x12\x34\n\tinterrupt\x18\x03 \x01(\x0b\x32\x1f.sentio.gateway.ClientInterruptH\x00\x12*\n\x04ping\x18\x04 \x01(\x0b\x32\x1a.sentio.gateway.ClientPingH\x00\x12\x31\n\x0bvideo_frame\x18\x05 \x01(\x0b\x32\x1a.sentio.gateway.VideoFrameH\x00\x42\t\n\x07payload\"\x82\x02\n\x0bSessionInit\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x12\n\nauth_token\x18\x03 \x01(\t\x12\x1b\n\x13system_instructions\x18\x04 \x01(\t\x12\x12\n\nvoice_name\x18\x05 \x01(\t\x12;\n\x08metadata\x18\x06 \x03(\x0b\x32).sentio.gateway.SessionInit.MetadataEntry\x12\x1b\n\x13response_modalities\x18\x07 \x03(\t\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"0\n\rRealtimeAudio\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\x11\n\tmime_type\x18\x02 \x01(\t\"C\n\nVideoFrame\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\x11\n\tmime_type\x18\x02 \x01(\t\x12\x14\n\x0ctimestamp_ms\x18\x03 \x01(\x03\"7\n\x0f\x43lientInterrupt\x12\x14\n\x0ctimestamp_ms\x18\x01 \x01(\x03\x12\x0e\n\x06reason\x18\x02 \x01(\t\"\"\n\nClientPing\x12\x14\n\x0ctimestamp_ms\x18\x01 \x01(\x03\"\x84\x03\n\x0bServerEvent\x12\x35\n\rsession_ready\x18\x01 \x01(\x0b\x32\x1c.sentio.gateway.SessionReadyH\x00\x12\x34\n\x0b\x61udio_chunk\x18\x02 \x01(\x0b\x32\x1d.sentio.gateway.RealtimeAudioH\x00\x12\x30\n\ntranscript\x18\x03 \x01(\x0b\x32\x1a.sentio.gateway.TranscriptH\x00\x12\x35\n\rstop_playback\x18\x04 \x01(\x0b\x32\x1c.sentio.gateway.StopPlaybackH\x00\x12*\n\x04pong\x18\x05 \x01(\x0b\x32\x1a.sentio.gateway.ServerPongH\x00\x12-\n\x05\x65rror\x18\x06 \x01(\x0b\x32\x1c.sentio.gateway.GatewayErrorH\x00\x12\x39\n\x0f\x64istress_update\x18\x07 \x01(\x0b\x32\x1e.sentio.gateway.DistressUpdateH\x00\x42\t\n\x07payload\"a\n\x0cSessionReady\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x18\n\x10prior_turn_count\x18\x02 \x01(\x05\x12\x12\n\nrehydrated\x18\x03 \x01(\x08\x12\x0f\n\x07message\x18\x04 \x01(\t\"\xb0\x01\n\nTranscript\x12\x33\n\x07speaker\x18\x01 \x01(\x0e\x32\".sentio.gateway.Transcript.Speaker\x12\x0c\n\x04text\x18\x02 \x01(\t\x12\x10\n\x08is_final\x18\x03 \x01(\x08\x12\x14\n\x0ctimestamp_ms\x18\x04 \x01(\x03\"7\n\x07Speaker\x12\x17\n\x13SPEAKER_UNSPECIFIED\x10\x00\x12\x08\n\x04USER\x10\x01\x12\t\n\x05MODEL\x10\x02\"4\n\x0cStopPlayback\x12\x14\n\x0ctimestamp_ms\x18\x01 \x01(\x03\x12\x0e\n\x06reason\x18\x02 \x01(\t\"\"\n\nServerPong\x12\x14\n\x0ctimestamp_ms\x18\x01 \x01(\x03\"F\n\x0e\x44istressUpdate\x12\r\n\x05score\x18\x01 \x01(\x02\x12\x0f\n\x07\x65motion\x18\x02 \x01(\t\x12\x14\n\x0ctimestamp_ms\x18\x03 \x01(\x03\"\xf1\x01\n\x0cGatewayError\x12\x34\n\x04\x63ode\x18\x01 \x01(\x0e\x32&.sentio.gateway.GatewayError.ErrorCode\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x13\n\x0brecoverable\x18\x03 \x01(\x08\"\x84\x01\n\tErrorCode\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x13\n\x0fUNAUTHENTICATED\x10\x01\x12\x13\n\x0fSESSION_EXPIRED\x10\x02\x12\x1a\n\x16\x41I_SERVICE_UNAVAILABLE\x10\x03\x12\x10\n\x0cRATE_LIMITED\x10\x04\x12\x12\n\x0eINTERNAL_ERROR\x10\x05\x32\x62\n\x11SentioLiveGateway\x12M\n\rStreamSession\x12\x1b.sentio.gateway.ClientEvent\x1a\x1b.sentio.gateway.ServerEvent(\x01\x30\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,35 +34,37 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_SESSIONINIT_METADATAENTRY']._loaded_options = None
   _globals['_SESSIONINIT_METADATAENTRY']._serialized_options = b'8\001'
   _globals['_CLIENTEVENT']._serialized_start=47
-  _globals['_CLIENTEVENT']._serialized_end=276
-  _globals['_SESSIONINIT']._serialized_start=279
-  _globals['_SESSIONINIT']._serialized_end=537
-  _globals['_SESSIONINIT_METADATAENTRY']._serialized_start=490
-  _globals['_SESSIONINIT_METADATAENTRY']._serialized_end=537
-  _globals['_REALTIMEAUDIO']._serialized_start=539
-  _globals['_REALTIMEAUDIO']._serialized_end=587
-  _globals['_CLIENTINTERRUPT']._serialized_start=589
-  _globals['_CLIENTINTERRUPT']._serialized_end=644
-  _globals['_CLIENTPING']._serialized_start=646
-  _globals['_CLIENTPING']._serialized_end=680
-  _globals['_SERVEREVENT']._serialized_start=683
-  _globals['_SERVEREVENT']._serialized_end=1071
-  _globals['_SESSIONREADY']._serialized_start=1073
-  _globals['_SESSIONREADY']._serialized_end=1170
-  _globals['_TRANSCRIPT']._serialized_start=1173
-  _globals['_TRANSCRIPT']._serialized_end=1349
-  _globals['_TRANSCRIPT_SPEAKER']._serialized_start=1294
-  _globals['_TRANSCRIPT_SPEAKER']._serialized_end=1349
-  _globals['_STOPPLAYBACK']._serialized_start=1351
-  _globals['_STOPPLAYBACK']._serialized_end=1403
-  _globals['_SERVERPONG']._serialized_start=1405
-  _globals['_SERVERPONG']._serialized_end=1439
-  _globals['_DISTRESSUPDATE']._serialized_start=1441
-  _globals['_DISTRESSUPDATE']._serialized_end=1511
-  _globals['_GATEWAYERROR']._serialized_start=1514
-  _globals['_GATEWAYERROR']._serialized_end=1755
-  _globals['_GATEWAYERROR_ERRORCODE']._serialized_start=1623
-  _globals['_GATEWAYERROR_ERRORCODE']._serialized_end=1755
-  _globals['_SENTIOLIVEGATEWAY']._serialized_start=1757
-  _globals['_SENTIOLIVEGATEWAY']._serialized_end=1855
+  _globals['_CLIENTEVENT']._serialized_end=327
+  _globals['_SESSIONINIT']._serialized_start=330
+  _globals['_SESSIONINIT']._serialized_end=588
+  _globals['_SESSIONINIT_METADATAENTRY']._serialized_start=541
+  _globals['_SESSIONINIT_METADATAENTRY']._serialized_end=588
+  _globals['_REALTIMEAUDIO']._serialized_start=590
+  _globals['_REALTIMEAUDIO']._serialized_end=638
+  _globals['_VIDEOFRAME']._serialized_start=640
+  _globals['_VIDEOFRAME']._serialized_end=707
+  _globals['_CLIENTINTERRUPT']._serialized_start=709
+  _globals['_CLIENTINTERRUPT']._serialized_end=764
+  _globals['_CLIENTPING']._serialized_start=766
+  _globals['_CLIENTPING']._serialized_end=800
+  _globals['_SERVEREVENT']._serialized_start=803
+  _globals['_SERVEREVENT']._serialized_end=1191
+  _globals['_SESSIONREADY']._serialized_start=1193
+  _globals['_SESSIONREADY']._serialized_end=1290
+  _globals['_TRANSCRIPT']._serialized_start=1293
+  _globals['_TRANSCRIPT']._serialized_end=1469
+  _globals['_TRANSCRIPT_SPEAKER']._serialized_start=1414
+  _globals['_TRANSCRIPT_SPEAKER']._serialized_end=1469
+  _globals['_STOPPLAYBACK']._serialized_start=1471
+  _globals['_STOPPLAYBACK']._serialized_end=1523
+  _globals['_SERVERPONG']._serialized_start=1525
+  _globals['_SERVERPONG']._serialized_end=1559
+  _globals['_DISTRESSUPDATE']._serialized_start=1561
+  _globals['_DISTRESSUPDATE']._serialized_end=1631
+  _globals['_GATEWAYERROR']._serialized_start=1634
+  _globals['_GATEWAYERROR']._serialized_end=1875
+  _globals['_GATEWAYERROR_ERRORCODE']._serialized_start=1743
+  _globals['_GATEWAYERROR_ERRORCODE']._serialized_end=1875
+  _globals['_SENTIOLIVEGATEWAY']._serialized_start=1877
+  _globals['_SENTIOLIVEGATEWAY']._serialized_end=1975
 # @@protoc_insertion_point(module_scope)

@@ -15,6 +15,7 @@ message ClientEvent {
     RealtimeAudio audio_chunk = 2;
     ClientInterrupt interrupt = 3;
     ClientPing ping = 4;
+    VideoFrame video_frame = 5;
   }
 }
 
@@ -33,6 +34,13 @@ message SessionInit {
 message RealtimeAudio {
   bytes data = 1;
   string mime_type = 2; // e.g. "audio/pcm;rate=16000"
+}
+
+// VideoFrame contains image bytes for local ONNX facial emotion detection
+message VideoFrame {
+  bytes data = 1;       // e.g. JPEG, WebP, PNG bytes
+  string mime_type = 2; // e.g. "image/jpeg"
+  int64 timestamp_ms = 3;
 }
 
 // ClientInterrupt triggers barge-in (cancellation of current AI audio output)
