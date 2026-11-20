@@ -16,6 +16,7 @@ message ClientEvent {
     ClientInterrupt interrupt = 3;
     ClientPing ping = 4;
     VideoFrame video_frame = 5;
+    TextMessage text_message = 6;
   }
 }
 
@@ -41,6 +42,12 @@ message VideoFrame {
   bytes data = 1;       // e.g. JPEG, WebP, PNG bytes
   string mime_type = 2; // e.g. "image/jpeg"
   int64 timestamp_ms = 3;
+}
+
+// TextMessage contains a typed message from the user
+message TextMessage {
+  string text = 1;
+  int64 timestamp_ms = 2;
 }
 
 // ClientInterrupt triggers barge-in (cancellation of current AI audio output)

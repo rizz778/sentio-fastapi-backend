@@ -250,6 +250,26 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                                 )
                             )
 
+                    elif payload_field == "text_message":
+                        text_msg = client_event.text_message
+                        user_text = text_msg.text.strip()
+                        if user_text and session_id and user_id:
+                            logger.info(
+                                f"[gRPC] User typed text turn: session={session_id} text={user_text[:80]}"
+                            )
+                            # 1. Forward typed text turn into Gemini Live session
+                            if gemini_session:
+                                await gemini_session.send_text(user_text)
+
+                            # 2. Launch non-blocking user turn processing (distress scoring, Redis window, MongoDB persistence)
+                            turn_processor.launch_user_turn(
+                                session_id=session_id,
+                                user_id=user_id,
+                                text=user_text,
+                                on_distress_ready=on_distress_ready,
+                                auth_token=auth_token,
+                            )
+
                     else:
                         logger.warning(f"[gRPC] Unhandled client payload: {payload_field}")
 
