@@ -184,13 +184,30 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                             on_event=handle_gemini_event,
                         )
 
-                        # Connect opens session, applies client config, and injects Redis history
-                        await gemini_session.connect(
-                            system_instruction=system_instruction,
-                            voice_name=voice_name,
-                            response_modalities=response_modalities,
-                            resume_handle=resume_handle,
-                        )
+                        # Connect opens session, applies client config, and injects Redis history.
+                        # If a cached resumption handle has expired on Google's end, clear it and retry fresh.
+                        try:
+                            await gemini_session.connect(
+                                system_instruction=system_instruction,
+                                voice_name=voice_name,
+                                response_modalities=response_modalities,
+                                resume_handle=resume_handle,
+                            )
+                        except Exception as conn_err:
+                            err_str = str(conn_err).lower()
+                            if resume_handle and ("not found" in err_str or "expired" in err_str or "1008" in err_str):
+                                logger.warning(
+                                    f"[gRPC] Gemini session resumption failed ({conn_err}), clearing stale handle and connecting fresh..."
+                                )
+                                await redis_service.clear_gemini_resume_handle(session_id)
+                                await gemini_session.connect(
+                                    system_instruction=system_instruction,
+                                    voice_name=voice_name,
+                                    response_modalities=response_modalities,
+                                    resume_handle=None,
+                                )
+                            else:
+                                raise conn_err
 
                         session_initialized = True
 

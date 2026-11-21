@@ -46,7 +46,7 @@ class GeminiLiveSession:
         self.user_id = user_id
         self.on_event = on_event
         self.api_key = api_key or settings.GEMINI_API_KEY
-        self.model = model or settings.GEMINI_AUDIO_MODEL
+        self.model = model
 
         self._client: Optional[genai.Client] = None
         self._session: Any = None
@@ -71,58 +71,60 @@ class GeminiLiveSession:
 
         self._client = genai.Client(
             api_key=self.api_key,
-            http_options=types.HttpOptions(api_version="v1alpha"),
+            http_options=types.HttpOptions(api_version=getattr(settings, "GEMINI_API_VERSION", "v1beta")),
         )
 
         modalities = [m.upper() for m in response_modalities] if response_modalities else ["AUDIO"]
         selected_voice = voice_name or getattr(settings, "GEMINI_VOICE_NAME", "Puck")
         effective_instruction = system_instruction or getattr(settings, "DEFAULT_SYSTEM_INSTRUCTION", "You are a Therapist")
 
-        speech_config = None
-        if "AUDIO" in modalities:
-            speech_config = types.SpeechConfig(
-                voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name=selected_voice
-                    )
+        # Gemini Live conversational model requires response_modalities=["AUDIO"] on bidi streaming.
+        # It generates both high-quality audio streaming and real-time speech-to-text transcripts simultaneously.
+        live_modalities = ["AUDIO"]
+        effective_model = self.model or getattr(settings, "GEMINI_AUDIO_MODEL", "gemini-3.8-live")
+
+        speech_config = types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name=selected_voice
                 )
             )
+        )
 
         # Build session config
-        config = types.LiveConnectConfig(
-            response_modalities=modalities,
-            speech_config=speech_config,
-            system_instruction=types.Content(
+        config_kwargs = {
+            "response_modalities": live_modalities,
+            "speech_config": speech_config,
+            "input_audio_transcription": types.AudioTranscriptionConfig(),
+            "output_audio_transcription": types.AudioTranscriptionConfig(),
+            "system_instruction": types.Content(
                 parts=[types.Part.from_text(text=effective_instruction)]
             ),
-            enable_affective_dialog=True,
-            input_audio_transcription=types.AudioTranscriptionConfig(),
-            output_audio_transcription=types.AudioTranscriptionConfig(),
-            context_window_compression=types.ContextWindowCompressionConfig(
+            "context_window_compression": types.ContextWindowCompressionConfig(
                 sliding_window=types.SlidingWindow()
             ),
-        )
+        }
 
         # Attach session resumption handle if rehydrating
         if resume_handle:
-            config.session_resumption = types.SessionResumptionConfig(
+            config_kwargs["session_resumption"] = types.SessionResumptionConfig(
                 handle=resume_handle
             )
 
+        config = types.LiveConnectConfig(**config_kwargs)
+
         logger.info(
-            f"[GeminiLive] Connecting session {self.session_id} with model={self.model}, "
-            f"modalities={modalities}, voice={voice_name}"
+            f"[GeminiLive] Connecting session {self.session_id} with model={effective_model}, "
+            f"modalities={live_modalities}, voice={selected_voice}"
         )
 
         self._session_cm = self._client.aio.live.connect(
-            model=self.model, config=config
+            model=effective_model, config=config
         )
         self._session = await self._session_cm.__aenter__()
 
-        # Fetch and inject updated conversation history directly from Redis
-        await self.inject_history_from_redis()
-
-        # Start the background listener that reads all Gemini responses
+        # History and user profile are already injected into system_instruction at connection time.
+        # Starting the background listener that reads all Gemini Live responses.
         self._listener_task = asyncio.create_task(self._listen_loop())
 
         logger.info(
@@ -203,15 +205,7 @@ class GeminiLiveSession:
             f"Adapt your tone and response with appropriate empathy.]"
         )
         try:
-            turns = [
-                types.Content(
-                    role="user",
-                    parts=[types.Part.from_text(text=context_text)],
-                )
-            ]
-            await self._session.send_client_content(
-                turns=turns, turn_complete=False
-            )
+            await self._session.send_realtime_input(text=context_text)
         except Exception as e:
             logger.warning(f"[GeminiLive] Emotion context injection failed: {e}")
 
@@ -222,6 +216,7 @@ class GeminiLiveSession:
         Background task that continuously reads Gemini Live responses
         and dispatches them as structured events via self.on_event().
         """
+        accumulated_text = ""
         try:
             while not self._closed and self._session:
                 async for response in self._session.receive():
@@ -267,23 +262,25 @@ class GeminiLiveSession:
                                         "data": audio_bytes,
                                         "mime_type": mime,
                                     })
-                                # Text output
+                                # Text output (accumulate streaming chunks for text modality)
                                 if part.text:
+                                    accumulated_text += part.text
                                     await self.on_event({
                                         "type": "model_transcript",
-                                        "text": part.text,
+                                        "text": accumulated_text,
                                         "is_final": False,
                                     })
 
-                        # Output transcription (model speech-to-text)
+                        # Output transcription (model speech-to-text live stream)
                         output_transcription = getattr(
                             server_content, "output_transcription", None
                         )
                         if output_transcription and output_transcription.text:
+                            accumulated_text += output_transcription.text
                             await self.on_event({
                                 "type": "model_transcript",
-                                "text": output_transcription.text,
-                                "is_final": True,
+                                "text": accumulated_text,
+                                "is_final": False,
                             })
 
                         # Input transcription (user speech-to-text)
@@ -299,6 +296,7 @@ class GeminiLiveSession:
 
                         # Interruption / barge-in
                         if getattr(server_content, "interrupted", False):
+                            accumulated_text = ""
                             await self.on_event({
                                 "type": "interrupted",
                                 "timestamp_ms": int(time.time() * 1000),
@@ -312,6 +310,15 @@ class GeminiLiveSession:
 
                         # Turn complete
                         if getattr(server_content, "turn_complete", False):
+                            # In text modality, finalize accumulated model transcript
+                            if accumulated_text:
+                                await self.on_event({
+                                    "type": "model_transcript",
+                                    "text": accumulated_text,
+                                    "is_final": True,
+                                })
+                                accumulated_text = ""
+
                             await self.on_event({
                                 "type": "turn_complete",
                             })

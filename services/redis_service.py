@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -165,6 +166,17 @@ class RedisService:
             except Exception as e:
                 logger.warning(f"[RedisService] Failed to get resume handle: {e}")
         return self._fallback_memory.get(key)
+
+    async def clear_gemini_resume_handle(self, session_id: str) -> None:
+        key = f"sentio:session:{session_id}:resume_handle"
+        client = await self.get_client()
+        if client:
+            try:
+                await client.delete(key)
+                return
+            except Exception as e:
+                logger.warning(f"[RedisService] Failed to delete resume handle: {e}")
+        self._fallback_memory.pop(key, None)
 
     async def close(self) -> None:
         if self._client:
