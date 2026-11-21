@@ -107,6 +107,18 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                         auth_token=auth_token,
                     )
 
+            elif event_type in ("turn_complete", "generation_complete"):
+                # Forward turn completion signal so client releases input lock immediately
+                turn_done_event = pb2.ServerEvent(
+                    transcript=pb2.Transcript(
+                        speaker=pb2.Transcript.MODEL,
+                        text="",
+                        is_final=True,
+                        timestamp_ms=int(time.time() * 1000),
+                    )
+                )
+                await outbound_queue.put(turn_done_event)
+
             elif event_type == "interrupted":
                 stop_event = pb2.ServerEvent(
                     stop_playback=pb2.StopPlayback(
