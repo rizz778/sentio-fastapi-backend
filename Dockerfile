@@ -1,10 +1,10 @@
-FROM python:3.10.3-slim
+FROM python:3.10-slim-bookworm
 
 WORKDIR /app
 
-# Install system packages for OpenCV, webrtcvad, and build tools
+# Install system packages for OpenCV and build tools
 RUN apt-get update && \
-    apt-get install -y \
+    apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
     libgl1 \
