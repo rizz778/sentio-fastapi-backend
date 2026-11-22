@@ -88,14 +88,29 @@ class HostedEmotionService:
             )
 
             # 100% asynchronous network call — does not block asyncio loop
-            response = await client.aio.models.generate_content(
-                model=settings.GEMINI_VISION_MODEL,
-                contents=[image_part, SYSTEM_PROMPT],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.1,
-                ),
-            )
+            try:
+                response = await client.aio.models.generate_content(
+                    model=settings.GEMINI_VISION_MODEL,
+                    contents=[image_part, SYSTEM_PROMPT],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.1,
+                    ),
+                )
+            except Exception as primary_err:
+                err_str = str(primary_err)
+                if "503" in err_str or "UNAVAILABLE" in err_str:
+                    logger.warning("[EmotionService] Primary vision model busy, falling back to gemini-2.0-flash")
+                    response = await client.aio.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=[image_part, SYSTEM_PROMPT],
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            temperature=0.1,
+                        ),
+                    )
+                else:
+                    raise primary_err
 
             raw_text = (response.text or "").strip()
             parsed = json.loads(raw_text)
