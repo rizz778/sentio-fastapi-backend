@@ -294,30 +294,39 @@ class GeminiLiveSession:
                                 "is_final": True,
                             })
 
+                        # Generation complete (text generation finished; audio stream may still be playing)
+                        # Finalize model transcript immediately so quick reloads persist the AI response
+                        if getattr(server_content, "generation_complete", False):
+                            if accumulated_text and accumulated_text.strip():
+                                final_model_text = accumulated_text.strip()
+                                accumulated_text = ""
+                                await self.on_event({
+                                    "type": "model_transcript",
+                                    "text": final_model_text,
+                                    "is_final": True,
+                                })
+
                         # Interruption / barge-in
                         if getattr(server_content, "interrupted", False):
+                            interrupted_text = accumulated_text.strip()
                             accumulated_text = ""
                             await self.on_event({
                                 "type": "interrupted",
+                                "text": interrupted_text,
                                 "timestamp_ms": int(time.time() * 1000),
-                            })
-
-                        # Generation complete
-                        if getattr(server_content, "generation_complete", False):
-                            await self.on_event({
-                                "type": "generation_complete",
                             })
 
                         # Turn complete
                         if getattr(server_content, "turn_complete", False):
-                            # In text modality, finalize accumulated model transcript
-                            if accumulated_text:
+                            # Fallback: if not already finalized on generation_complete, finalize now
+                            if accumulated_text and accumulated_text.strip():
+                                final_model_text = accumulated_text.strip()
+                                accumulated_text = ""
                                 await self.on_event({
                                     "type": "model_transcript",
-                                    "text": accumulated_text,
+                                    "text": final_model_text,
                                     "is_final": True,
                                 })
-                                accumulated_text = ""
 
                             await self.on_event({
                                 "type": "turn_complete",
@@ -336,12 +345,33 @@ class GeminiLiveSession:
 
         except asyncio.CancelledError:
             logger.info(f"[GeminiLive] Listener cancelled for session {self.session_id}")
+            # Flush any unpersisted model text so disconnecting/reloading never loses the turn
+            if accumulated_text and accumulated_text.strip():
+                try:
+                    await self.on_event({
+                        "type": "model_transcript",
+                        "text": accumulated_text.strip(),
+                        "is_final": True,
+                    })
+                except Exception as flush_err:
+                    logger.warning(f"[GeminiLive] Error flushing accumulated text on cancel: {flush_err}")
+                accumulated_text = ""
         except Exception as e:
             if not self._closed:
                 logger.error(
                     f"[GeminiLive] Listener error for session {self.session_id}: {e}",
                     exc_info=True,
                 )
+                if accumulated_text and accumulated_text.strip():
+                    try:
+                        await self.on_event({
+                            "type": "model_transcript",
+                            "text": accumulated_text.strip(),
+                            "is_final": True,
+                        })
+                    except Exception as flush_err:
+                        logger.warning(f"[GeminiLive] Error flushing accumulated text on error: {flush_err}")
+                    accumulated_text = ""
                 await self.on_event({
                     "type": "error",
                     "message": str(e),

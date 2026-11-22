@@ -37,6 +37,7 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
         auth_token: Optional[str] = None
         gemini_session: Optional[GeminiLiveSession] = None
         session_initialized = False
+        last_persisted_model_turn: Optional[str] = None
 
         async def on_distress_ready(distress_score: float, emotion: str, timestamp_ms: int) -> None:
             """Callback from TurnProcessor when distress scoring completes for a user turn."""
@@ -51,6 +52,7 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
 
         async def handle_gemini_event(event: Dict[str, Any]) -> None:
             """Translates Gemini Live events to protobuf ServerEvents and dispatches them."""
+            nonlocal last_persisted_model_turn
             event_type = event.get("type")
 
             if event_type == "audio_chunk":
@@ -75,6 +77,9 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                 )
                 await outbound_queue.put(transcript_event)
 
+                # Reset model persistence deduplication for the new turn
+                last_persisted_model_turn = None
+
                 # On final user transcript, trigger non-blocking turn processing & distress evaluation
                 if is_final and text.strip() and session_id and user_id:
                     turn_processor.launch_user_turn(
@@ -98,16 +103,22 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                 )
                 await outbound_queue.put(transcript_event)
 
-                # On final model transcript, persist turn asynchronously
-                if is_final and text.strip() and session_id:
-                    turn_processor.launch_model_turn(
-                        session_id=session_id,
-                        text=text,
-                        user_id=user_id,
-                        auth_token=auth_token,
-                    )
+                # On final model transcript with actual content, persist turn asynchronously
+                clean_text = text.strip()
+                if is_final and clean_text and session_id:
+                    if clean_text != last_persisted_model_turn:
+                        last_persisted_model_turn = clean_text
+                        logger.info(
+                            f"[gRPC] Persisting completed model turn ({len(clean_text)} chars) for session={session_id}"
+                        )
+                        turn_processor.launch_model_turn(
+                            session_id=session_id,
+                            text=clean_text,
+                            user_id=user_id,
+                            auth_token=auth_token,
+                        )
 
-            elif event_type in ("turn_complete", "generation_complete"):
+            elif event_type == "turn_complete":
                 # Forward turn completion signal so client releases input lock immediately
                 turn_done_event = pb2.ServerEvent(
                     transcript=pb2.Transcript(
@@ -120,6 +131,21 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                 await outbound_queue.put(turn_done_event)
 
             elif event_type == "interrupted":
+                # If there was text generated before the turn was interrupted, persist it to MongoDB so it is not lost on reload
+                interrupted_text = (event.get("text", "") or "").strip()
+                if interrupted_text and session_id:
+                    if interrupted_text != last_persisted_model_turn:
+                        last_persisted_model_turn = interrupted_text
+                        logger.info(
+                            f"[gRPC] Persisting interrupted model turn ({len(interrupted_text)} chars) for session={session_id}"
+                        )
+                        turn_processor.launch_model_turn(
+                            session_id=session_id,
+                            text=interrupted_text,
+                            user_id=user_id,
+                            auth_token=auth_token,
+                        )
+
                 stop_event = pb2.ServerEvent(
                     stop_playback=pb2.StopPlayback(
                         timestamp_ms=event.get("timestamp_ms", int(time.time() * 1000)),
@@ -180,6 +206,15 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
 
                         user_profile, prior_messages, resume_handle = await asyncio.gather(
                             profile_task, history_task, resume_handle_task
+                        )
+
+                        profile_name = None
+                        if isinstance(user_profile, dict):
+                            p_data = user_profile.get("userProfile") if isinstance(user_profile.get("userProfile"), dict) else user_profile
+                            profile_name = p_data.get("name")
+                        logger.info(
+                            f"[gRPC] Resolved user profile for session={session_id}: name={profile_name}, "
+                            f"keys={list(user_profile.keys()) if isinstance(user_profile, dict) else None}"
                         )
 
                         # 2. Build system instruction from FastAPI config and user profile
@@ -286,6 +321,9 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                             logger.info(
                                 f"[gRPC] User typed text turn: session={session_id} text={user_text[:80]}"
                             )
+                            # Reset model persistence deduplication for the new turn
+                            last_persisted_model_turn = None
+
                             # 1. Forward typed text turn into Gemini Live session
                             if gemini_session:
                                 await gemini_session.send_text(user_text)
@@ -350,15 +388,19 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
     async def _resolve_user_profile(
         self, user_id: str, auth_token: Optional[str], session_id: str
     ) -> Optional[Dict[str, Any]]:
-        """Checks Redis for cached profile; falls back to Node backend."""
-        profile = await redis_service.get_session_profile(session_id)
-        if profile:
-            return profile
-
+        """
+        Resolves latest user profile.
+        Fetches fresh profile via Node backend (which has its own Redis cache)
+        so profile updates apply immediately across all sessions.
+        """
         profile = await node_client.fetch_user_profile(user_id=user_id, auth_token=auth_token)
         if profile:
+            # Also keep session cache updated as offline fallback
             await redis_service.set_session_profile(session_id, profile)
-        return profile
+            return profile
+
+        # Fallback to cached profile if node backend is temporarily unreachable
+        return await redis_service.get_session_profile(session_id)
 
     async def _resolve_session_history(
         self, session_id: str, auth_token: Optional[str], user_id: Optional[str]

@@ -7,32 +7,57 @@ EMPATHY_INSTRUCTION = (
 
 
 def format_user_profile(user_profile: Dict[str, Any]) -> str:
-    if not user_profile:
+    if not user_profile or not isinstance(user_profile, dict):
         return ""
 
-    triggers = ", ".join(user_profile.get("triggers", []))
-    coping = ", ".join(user_profile.get("copingMechanisms", []))
-    preferences = ", ".join(user_profile.get("preferences", []))
+    # Unwrap if response is nested under "userProfile" key
+    if "userProfile" in user_profile and isinstance(user_profile["userProfile"], dict):
+        user_profile = user_profile["userProfile"]
 
-    return (
-        f"The user's name is {user_profile.get('name', 'Unknown')}. "
-        f"Age: {user_profile.get('age', 'Unknown')}, Gender: {user_profile.get('gender', 'Unknown')}. "
-        f"Stress Frequency: {user_profile.get('stressFrequency', 'Unknown')}. "
-        f"Sleep: {user_profile.get('sleep', 'Unknown')}. "
-        f"Exercise: {user_profile.get('exercise', 'Unknown')}. "
-        f"Triggers: {triggers}. "
-        f"Coping Mechanisms: {coping}. "
-        f"Support System: {user_profile.get('supportSystem', 'Unknown')}. "
-        f"Preferred Language: {user_profile.get('preferredLanguage', 'Unknown')}. "
-        f"Response Style: {user_profile.get('responseStyle', 'Unknown')}. "
-        f"Preferences: {preferences}. "
-        "You MUST use this information when answering questions about the user. "
-        "If the user asks for their name, always use the name from the profile above. "
-        "If the user asks about themselves, always refer to the profile above. "
-        "Never say you don't have access to the user's information. "
-        "Don't use asterisks for emphasis, use all caps instead. "
-        f"{EMPATHY_INSTRUCTION}"
-    )
+    name = user_profile.get("name") or "Unknown"
+    age = user_profile.get("age") or "Unknown"
+    gender = user_profile.get("gender") or "Unknown"
+    pref_lang = user_profile.get("preferredLanguage") or "Unknown"
+    stress_freq = user_profile.get("stressFrequency") or "Unknown"
+    sleep = user_profile.get("sleepHours") or user_profile.get("sleep") or "Unknown"
+    exercise = user_profile.get("exerciseFrequency") or user_profile.get("exercise") or "Unknown"
+    triggers = ", ".join(user_profile.get("triggers", [])) if isinstance(user_profile.get("triggers"), list) else ""
+    coping = ", ".join(user_profile.get("copingMechanisms", [])) if isinstance(user_profile.get("copingMechanisms"), list) else ""
+    support = user_profile.get("hasSupportSystem") if user_profile.get("hasSupportSystem") is not None else user_profile.get("supportSystem", "Unknown")
+    response_style = user_profile.get("responsePreference") or user_profile.get("responseStyle") or "Unknown"
+    preferences = ", ".join(user_profile.get("preferences", [])) if isinstance(user_profile.get("preferences"), list) else ""
+    condition = user_profile.get("diagnosedCondition") or ""
+    current_mood = user_profile.get("currentMood") or ""
+
+    profile_parts = [
+        f"The user's name is {name}.",
+        f"Age: {age}, Gender: {gender}.",
+        f"Preferred Language: {pref_lang}.",
+        f"Stress Frequency: {stress_freq}.",
+        f"Sleep Hours: {sleep}.",
+        f"Exercise Frequency: {exercise}.",
+        f"Triggers: {triggers or 'None noted'}.",
+        f"Coping Mechanisms: {coping or 'None noted'}.",
+        f"Support System: {support}.",
+        f"Response Style: {response_style}.",
+    ]
+    if condition:
+        profile_parts.append(f"Diagnosed Condition: {condition}.")
+    if current_mood:
+        profile_parts.append(f"Current Mood: {current_mood}.")
+    if preferences:
+        profile_parts.append(f"Preferences: {preferences}.")
+
+    profile_parts.extend([
+        "You MUST use this information when answering questions about the user.",
+        "If the user asks for their name, always use the name from the profile above.",
+        "If the user asks about themselves, always refer to the profile above.",
+        "Never say you don't have access to the user's information.",
+        "Don't use asterisks for emphasis, use all caps instead.",
+        EMPATHY_INSTRUCTION,
+    ])
+
+    return " ".join(profile_parts)
 
 
 def format_conversation_history(conversation_history: List[Dict[str, Any]], limit: int = 5) -> str:

@@ -10,6 +10,7 @@ Kept strictly separate from LLM scoring logic in distress_service.py.
 """
 
 import asyncio
+import datetime
 import logging
 import time
 from typing import Any, Callable, Coroutine, Dict, Optional
@@ -40,18 +41,33 @@ class TurnProcessor:
         """
         try:
             timestamp_ms = int(time.time() * 1000)
+            user_iso_timestamp = datetime.datetime.fromtimestamp(
+                timestamp_ms / 1000.0, datetime.timezone.utc
+            ).isoformat()
 
             # 1. Snapshot running facial emotion from Redis
             emotion_data = await redis_service.get_user_emotion(user_id)
             emotion = emotion_data.get("emotion", "neutral") if emotion_data else "neutral"
 
-            # 2. Get current sliding window from Redis for context
+            # 2. Persist user message to MongoDB IMMEDIATELY so quick reloads never lose it
+            node_client.fire_and_forget_persist(
+                session_id=session_id,
+                sender="user",
+                text=text,
+                emotion=emotion,
+                distress_score=0.0,
+                auth_token=auth_token,
+                user_id=user_id,
+                timestamp=user_iso_timestamp,
+            )
+
+            # 3. Get current sliding window from Redis for context
             sliding_window = await redis_service.get_sliding_window(session_id)
 
-            # 3. Compute distress score asynchronously
+            # 4. Compute distress score asynchronously
             distress_score = await distress_service.score_distress(text, sliding_window)
 
-            # 4. Push user message into Redis sliding window
+            # 5. Push user message with distress score into Redis sliding window
             enriched_user_msg = {
                 "sender": "user",
                 "text": text,
@@ -60,17 +76,6 @@ class TurnProcessor:
                 "timestamp": timestamp_ms,
             }
             await redis_service.push_sliding_message(session_id, enriched_user_msg)
-
-            # 5. Non-blocking persist to MongoDB via Node backend
-            node_client.fire_and_forget_persist(
-                session_id=session_id,
-                sender="user",
-                text=text,
-                emotion=emotion,
-                distress_score=distress_score,
-                auth_token=auth_token,
-                user_id=user_id,
-            )
 
             # 6. Notify callback to push DistressUpdate over gRPC to client
             await on_distress_ready(distress_score, emotion, timestamp_ms)
@@ -98,6 +103,9 @@ class TurnProcessor:
         """
         try:
             timestamp_ms = int(time.time() * 1000)
+            model_iso_timestamp = datetime.datetime.fromtimestamp(
+                timestamp_ms / 1000.0, datetime.timezone.utc
+            ).isoformat()
 
             # Push model response into Redis sliding window
             model_msg = {
@@ -107,13 +115,14 @@ class TurnProcessor:
             }
             await redis_service.push_sliding_message(session_id, model_msg)
 
-            # Non-blocking persist to MongoDB via Node backend
+            # Non-blocking persist to MongoDB via Node backend with explicit model timestamp
             node_client.fire_and_forget_persist(
                 session_id=session_id,
                 sender="model",
                 text=text,
                 auth_token=auth_token,
                 user_id=user_id,
+                timestamp=model_iso_timestamp,
             )
 
             logger.debug(
