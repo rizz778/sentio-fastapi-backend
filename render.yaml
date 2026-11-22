@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: sentio-fastapi
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.12
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: NODE_BACKEND_URL
+        sync: false
+      - key: GEMINI_VISION_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_LIVE_TEXT_MODEL
+        value: gemini-3.8-live
+      - key: GEMINI_AUDIO_MODEL
+        value: gemini-3.8-live
+      - key: GEMINI_DISTRESS_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_VOICE_NAME
+        value: Puck
