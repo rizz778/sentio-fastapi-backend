@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # Redis & Upstream Service Settings
     REDIS_URL: str = "redis://localhost:6379"
-    NODE_BACKEND_URL: str = "http://127.0.0.1:5000"
+    NODE_BACKEND_URL: str = "https://sentio-node-backend.onrender.com"
 
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:5173",
