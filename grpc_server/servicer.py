@@ -440,6 +440,10 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                 frame_data, mime_type=mime_type, session_id=session_id
             )
 
+            logger.info(
+                f"[gRPC] User emotion detected: '{current_emotion}' (smoothed: '{aggregated_emotion}') for session={session_id} user={user_id}"
+            )
+
             # Check previous running emotion to detect shifts
             prev_emotion_data = await redis_service.get_user_emotion(user_id)
             prev_emotion = prev_emotion_data.get("emotion") if prev_emotion_data else None

@@ -125,8 +125,8 @@ class HostedEmotionService:
             most_common = Counter(buf).most_common(1)
             aggregated = most_common[0][0] if most_common else detected
 
-            logger.debug(
-                f"[EmotionService] Frame analyzed: {detected} (smooth: {aggregated}) for {active_sid}"
+            logger.info(
+                f"[EmotionService] 😊 Detected emotion: '{detected}' (smoothed: '{aggregated}') for session {active_sid}"
             )
             return detected, aggregated
 
