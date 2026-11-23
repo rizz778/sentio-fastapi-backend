@@ -100,9 +100,16 @@ class HostedEmotionService:
             except Exception as primary_err:
                 err_str = str(primary_err)
                 if "503" in err_str or "UNAVAILABLE" in err_str or "404" in err_str or "NOT_FOUND" in err_str:
-                    logger.warning("[EmotionService] Primary vision model error, falling back to gemini-2.0-flash")
+                    fallback_model = (
+                        "gemini-3.8-flash"
+                        if settings.GEMINI_VISION_MODEL != "gemini-3.8-flash"
+                        else "gemini-3.5-flash-lite"
+                    )
+                    logger.warning(
+                        f"[EmotionService] Primary vision model ({settings.GEMINI_VISION_MODEL}) error, falling back to {fallback_model}"
+                    )
                     response = await client.aio.models.generate_content(
-                        model="gemini-2.0-flash",
+                        model=fallback_model,
                         contents=[image_part, SYSTEM_PROMPT],
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",

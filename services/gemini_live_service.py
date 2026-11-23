@@ -52,7 +52,81 @@ class GeminiLiveSession:
         self._session: Any = None
         self._session_cm: Any = None
         self._listener_task: Optional[asyncio.Task] = None
+        self._keepalive_task: Optional[asyncio.Task] = None
         self._closed = False
+        self._system_instruction: Optional[str] = None
+        self._voice_name: Optional[str] = None
+        self._response_modalities: Optional[List[str]] = None
+        self._resume_handle: Optional[str] = None
+        self._last_activity_time: float = time.time()
+
+    @property
+    def is_connected(self) -> bool:
+        return (
+            self._session is not None
+            and not self._closed
+            and self._listener_task is not None
+            and not self._listener_task.done()
+        )
+
+    async def ensure_connected(self) -> None:
+        """Auto-reconnects if the session dropped or went idle due to inactivity."""
+        if self.is_connected or self._closed:
+            return
+
+        logger.info(f"[GeminiLive] Auto-reconnecting idle/dormant session {self.session_id}...")
+        if self._listener_task and not self._listener_task.done():
+            self._listener_task.cancel()
+        if self._keepalive_task and not self._keepalive_task.done():
+            self._keepalive_task.cancel()
+
+        cached_handle = await redis_service.get_gemini_resume_handle(self.session_id)
+        resume_h = cached_handle or self._resume_handle
+        try:
+            await self.connect(
+                system_instruction=self._system_instruction,
+                voice_name=self._voice_name,
+                response_modalities=self._response_modalities,
+                resume_handle=resume_h,
+            )
+        except Exception as e:
+            err_str = str(e).lower()
+            if resume_h and ("not found" in err_str or "expired" in err_str or "1008" in err_str):
+                logger.warning(f"[GeminiLive] Resume handle expired ({e}), connecting fresh...")
+                await redis_service.clear_gemini_resume_handle(self.session_id)
+                self._resume_handle = None
+                await self.connect(
+                    system_instruction=self._system_instruction,
+                    voice_name=self._voice_name,
+                    response_modalities=self._response_modalities,
+                    resume_handle=None,
+                )
+            else:
+                logger.error(f"[GeminiLive] Auto-reconnect failed for {self.session_id}: {e}")
+                raise e
+
+    async def _keepalive_loop(self) -> None:
+        """
+        Periodically sends a tiny frame of digital silence (PCM) if no input has been
+        sent in the last 20 seconds, preventing Gemini Live's 60-second inactivity disconnect.
+        """
+        silence_chunk = b"\x00" * 320  # 10ms of 16kHz 16-bit mono PCM silence
+        try:
+            while not self._closed:
+                await asyncio.sleep(15)
+                if self._closed or not self.is_connected:
+                    continue
+                if time.time() - self._last_activity_time >= 20:
+                    try:
+                        await self._session.send_realtime_input(
+                            audio=types.Blob(data=silence_chunk, mime_type="audio/pcm;rate=16000")
+                        )
+                        self._last_activity_time = time.time()
+                        logger.debug(f"[GeminiLive] Keepalive ping sent for {self.session_id}")
+                    except Exception as e:
+                        logger.debug(f"[GeminiLive] Keepalive ping error: {e}")
+        except asyncio.CancelledError:
+            pass
 
     async def connect(
         self,
@@ -123,9 +197,18 @@ class GeminiLiveSession:
         )
         self._session = await self._session_cm.__aenter__()
 
+        self._system_instruction = effective_instruction
+        self._voice_name = selected_voice
+        self._response_modalities = live_modalities
+        if resume_handle:
+            self._resume_handle = resume_handle
+        self._last_activity_time = time.time()
+
         # History and user profile are already injected into system_instruction at connection time.
         # Starting the background listener that reads all Gemini Live responses.
         self._listener_task = asyncio.create_task(self._listen_loop())
+        if not self._keepalive_task or self._keepalive_task.done():
+            self._keepalive_task = asyncio.create_task(self._keepalive_loop())
 
         logger.info(
             f"[GeminiLive] Session {self.session_id} connected and listener started."
@@ -169,8 +252,12 @@ class GeminiLiveSession:
 
     async def send_audio(self, pcm_bytes: bytes, mime_type: str = "audio/pcm;rate=16000") -> None:
         """Stream raw PCM audio bytes into the live session."""
-        if self._closed or not self._session:
+        if self._closed:
             return
+        await self.ensure_connected()
+        if not self._session:
+            return
+        self._last_activity_time = time.time()
         try:
             await self._session.send_realtime_input(
                 audio=types.Blob(data=pcm_bytes, mime_type=mime_type)
@@ -180,8 +267,12 @@ class GeminiLiveSession:
 
     async def send_text(self, text: str) -> None:
         """Send a typed text turn into the live session."""
-        if self._closed or not self._session:
+        if self._closed:
             return
+        await self.ensure_connected()
+        if not self._session:
+            return
+        self._last_activity_time = time.time()
         try:
             turns = [
                 types.Content(
@@ -198,7 +289,7 @@ class GeminiLiveSession:
 
     async def inject_emotion_context(self, emotion: str) -> None:
         """Silently injects an emotion shift cue into the conversation context."""
-        if self._closed or not self._session:
+        if self._closed or not self.is_connected:
             return
         context_text = (
             f"[System Context: User's facial expression now shows '{emotion}'. "
@@ -206,6 +297,7 @@ class GeminiLiveSession:
         )
         try:
             await self._session.send_realtime_input(text=context_text)
+            self._last_activity_time = time.time()
         except Exception as e:
             logger.warning(f"[GeminiLive] Emotion context injection failed: {e}")
 
@@ -229,6 +321,7 @@ class GeminiLiveSession:
                         and response.session_resumption_update
                     ):
                         handle = response.session_resumption_update.new_handle
+                        self._resume_handle = handle
                         await self.on_event({
                             "type": "resume_handle",
                             "handle": handle,
@@ -358,6 +451,24 @@ class GeminiLiveSession:
                 accumulated_text = ""
         except Exception as e:
             if not self._closed:
+                err_str = str(e).lower()
+                is_inactivity = (
+                    "1008" in err_str
+                    or "inactivity" in err_str
+                    or "closed due to client inactivity" in err_str
+                )
+                if is_inactivity:
+                    logger.info(
+                        f"[GeminiLive] Session {self.session_id} paused due to client inactivity. Will resume automatically on next input."
+                    )
+                    self._session = None
+                    self._session_cm = None
+                    await self.on_event({
+                        "type": "session_idle",
+                        "message": "Session idle due to inactivity",
+                    })
+                    return
+
                 logger.error(
                     f"[GeminiLive] Listener error for session {self.session_id}: {e}",
                     exc_info=True,
@@ -380,10 +491,17 @@ class GeminiLiveSession:
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     async def close(self) -> None:
-        """Cleanly shuts down the Gemini Live session and listener."""
+        """Cleanly shuts down the Gemini Live session, listener, and keepalive."""
         if self._closed:
             return
         self._closed = True
+
+        if self._keepalive_task and not self._keepalive_task.done():
+            self._keepalive_task.cancel()
+            try:
+                await self._keepalive_task
+            except asyncio.CancelledError:
+                pass
 
         if self._listener_task and not self._listener_task.done():
             self._listener_task.cancel()
