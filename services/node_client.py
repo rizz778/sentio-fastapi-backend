@@ -16,8 +16,11 @@ class NodeBackendClient:
 
     def __init__(self, base_url: Optional[str] = None):
         url = (base_url or settings.NODE_BACKEND_URL).rstrip("/")
-        # Guarantee IPv4 loopback on Windows to prevent ::1 connection refusal
-        self.base_url = url.replace("localhost", "127.0.0.1")
+        # Only rewrite localhost to 127.0.0.1 if it's explicitly a local URL
+        if "localhost" in url and not url.startswith("https://") and not ".onrender.com" in url:
+            self.base_url = url.replace("localhost", "127.0.0.1")
+        else:
+            self.base_url = url
 
     def _build_headers(self, auth_token: Optional[str] = None, user_id: Optional[str] = None) -> Dict[str, str]:
         headers = {"Content-Type": "application/json"}
