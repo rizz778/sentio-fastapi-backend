@@ -18,6 +18,7 @@ from typing import Any, Callable, Coroutine, Dict, Optional
 from services.redis_service import redis_service
 from services.node_client import node_client
 from services.distress_service import distress_service
+from services.summary_service import summary_service
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +126,28 @@ class TurnProcessor:
                 timestamp=model_iso_timestamp,
             )
 
+            # Find the most recent user turn from sliding window to pair for summarization
+            recent_msgs = await redis_service.get_recent_messages(session_id, count=4)
+            last_user_text = ""
+            for msg in reversed(recent_msgs):
+                if isinstance(msg, dict) and msg.get("sender") == "user":
+                    last_user_text = msg.get("text", "")
+                    break
+
+            # Trigger asynchronous rolling conversation summary update (cache write-back)
+            if last_user_text or text:
+                asyncio.create_task(
+                    summary_service.update_summary_async(
+                        session_id=session_id,
+                        user_text=last_user_text,
+                        model_text=text,
+                        auth_token=auth_token,
+                        user_id=user_id,
+                    )
+                )
+
             logger.debug(
-                f"[TurnProcessor] Model turn persisted for session={session_id}"
+                f"[TurnProcessor] Model turn persisted & summary task queued for session={session_id}"
             )
 
         except Exception as e:

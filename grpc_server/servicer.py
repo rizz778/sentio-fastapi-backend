@@ -193,19 +193,22 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                             f"modalities={response_modalities}, voice={voice_name}"
                         )
 
-                        # 1. Parallel fetch/cache of user profile and session history
+                        # 1. Parallel fetch/cache of user profile, session history, rolling summary, and resume handle
                         profile_task = asyncio.create_task(
                             self._resolve_user_profile(user_id, auth_token, session_id)
                         )
                         history_task = asyncio.create_task(
                             self._resolve_session_history(session_id, auth_token, user_id)
                         )
+                        summary_task = asyncio.create_task(
+                            self._resolve_session_summary(session_id, auth_token, user_id)
+                        )
                         resume_handle_task = asyncio.create_task(
                             redis_service.get_gemini_resume_handle(session_id)
                         )
 
-                        user_profile, prior_messages, resume_handle = await asyncio.gather(
-                            profile_task, history_task, resume_handle_task
+                        user_profile, prior_messages, conversation_summary, resume_handle = await asyncio.gather(
+                            profile_task, history_task, summary_task, resume_handle_task
                         )
 
                         profile_name = None
@@ -214,12 +217,14 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                             profile_name = p_data.get("name")
                         logger.info(
                             f"[gRPC] Resolved user profile for session={session_id}: name={profile_name}, "
-                            f"keys={list(user_profile.keys()) if isinstance(user_profile, dict) else None}"
+                            f"keys={list(user_profile.keys()) if isinstance(user_profile, dict) else None}, "
+                            f"has_summary={bool(conversation_summary)}, prior_messages={len(prior_messages)}"
                         )
 
                         # 2. Build system instruction from FastAPI config and user profile
                         system_instruction = build_chat_system_instruction(
                             user_profile=user_profile,
+                            conversation_summary=conversation_summary,
                             conversation_history=prior_messages,
                             custom_instruction=settings.DEFAULT_SYSTEM_INSTRUCTION,
                         )
@@ -405,8 +410,8 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
     async def _resolve_session_history(
         self, session_id: str, auth_token: Optional[str], user_id: Optional[str]
     ) -> list:
-        """Checks Redis for sliding window; falls back to Node backend to rehydrate."""
-        window = await redis_service.get_sliding_window(session_id)
+        """Checks Redis for sliding window (recent 5 messages); falls back to Node backend to rehydrate."""
+        window = await redis_service.get_recent_messages(session_id, count=5)
         if window:
             return window
 
@@ -420,6 +425,31 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                 await redis_service.push_sliding_message(session_id, msg)
             return messages[-5:]
         return []
+
+    async def _resolve_session_summary(
+        self, session_id: str, auth_token: Optional[str], user_id: Optional[str]
+    ) -> str:
+        """Checks Redis for rolling summary; falls back to Node backend to rehydrate into cache."""
+        cached_summary = await redis_service.get_session_summary(session_id)
+        if cached_summary:
+            logger.info(
+                f"[gRPC] Found cached rolling summary in Redis for session={session_id} ({len(cached_summary)} chars)"
+            )
+            return cached_summary
+
+        # Rehydrate from Node backend / MongoDB
+        session_data = await node_client.fetch_session_data(
+            session_id=session_id, auth_token=auth_token, user_id=user_id
+        )
+        if session_data and isinstance(session_data, dict):
+            summary = session_data.get("conversationSummary") or ""
+            if summary:
+                await redis_service.set_session_summary(session_id, summary)
+                logger.info(
+                    f"[gRPC] Rehydrated rolling summary from MongoDB into Redis for session={session_id}"
+                )
+            return summary
+        return ""
 
     async def _handle_video_frame(
         self,

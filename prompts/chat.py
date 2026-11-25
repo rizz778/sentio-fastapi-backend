@@ -60,6 +60,12 @@ def format_user_profile(user_profile: Dict[str, Any]) -> str:
     return " ".join(profile_parts)
 
 
+def format_conversation_summary(summary: Optional[str]) -> str:
+    if not summary or not summary.strip():
+        return ""
+    return f"[Ongoing Session Clinical Summary]:\n{summary.strip()}"
+
+
 def format_conversation_history(conversation_history: List[Dict[str, Any]], limit: int = 5) -> str:
     if not conversation_history or not isinstance(conversation_history, list):
         return ""
@@ -68,25 +74,27 @@ def format_conversation_history(conversation_history: List[Dict[str, Any]], limi
     history_entries = [
         f"[{msg.get('sender', '')}: {msg.get('text', '')}]"
         for msg in last_msgs
-        if isinstance(msg, dict)
+        if isinstance(msg, dict) and msg.get("text")
     ]
     if not history_entries:
         return ""
-    return "Conversation so far: " + " ".join(history_entries)
+    return "[Recent Dialogue (Last 5 turns)]:\n" + "\n".join(history_entries)
 
 
 def build_chat_system_instruction(
     user_profile: Optional[Dict[str, Any]] = None,
+    conversation_summary: Optional[str] = None,
     conversation_history: Optional[List[Dict[str, Any]]] = None,
     custom_instruction: Optional[str] = None,
 ) -> str:
     profile_str = format_user_profile(user_profile) if user_profile else ""
-    history_str = format_conversation_history(conversation_history) if conversation_history else ""
+    summary_str = format_conversation_summary(conversation_summary)
+    history_str = format_conversation_history(conversation_history, limit=5) if conversation_history else ""
 
-    parts = [p for p in [profile_str, history_str, custom_instruction] if p]
-    system_instruction = " ".join(parts).strip()
+    parts = [p for p in [profile_str, summary_str, history_str, custom_instruction] if p]
+    system_instruction = "\n\n".join(parts).strip()
 
     if EMPATHY_INSTRUCTION not in system_instruction:
-        system_instruction = f"{system_instruction}\n{EMPATHY_INSTRUCTION}".strip()
+        system_instruction = f"{system_instruction}\n\n{EMPATHY_INSTRUCTION}".strip()
 
     return system_instruction or EMPATHY_INSTRUCTION

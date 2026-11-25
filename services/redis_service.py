@@ -115,6 +115,60 @@ class RedisService:
                 logger.warning(f"[RedisService] Failed to get sliding window: {e}")
         return self._fallback_memory.get(key, [])
 
+    async def get_recent_messages(
+        self, session_id: str, count: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Retrieves the last `count` messages from the sliding window."""
+        key = f"sentio:session:{session_id}:recent_messages"
+        client = await self.get_client()
+        if client:
+            try:
+                items = await client.lrange(key, -count, -1)
+                return [json.loads(item) for item in items]
+            except Exception as e:
+                logger.warning(f"[RedisService] Failed to get recent messages: {e}")
+        buf = self._fallback_memory.get(key, [])
+        return buf[-count:] if buf else []
+
+    # ── Rolling Conversation Summary ──────────────────────────────────────────
+
+    async def set_session_summary(
+        self, session_id: str, summary: str, ttl_seconds: int = 86400
+    ) -> None:
+        """Caches the rolling conversation summary for a session."""
+        key = f"sentio:session:{session_id}:summary"
+        client = await self.get_client()
+        if client:
+            try:
+                await client.set(key, summary, ex=ttl_seconds)
+                return
+            except Exception as e:
+                logger.warning(f"[RedisService] Failed to set summary: {e}")
+        self._fallback_memory[key] = summary
+
+    async def get_session_summary(self, session_id: str) -> Optional[str]:
+        """Retrieves the cached conversation summary for a session."""
+        key = f"sentio:session:{session_id}:summary"
+        client = await self.get_client()
+        if client:
+            try:
+                return await client.get(key)
+            except Exception as e:
+                logger.warning(f"[RedisService] Failed to get summary: {e}")
+        return self._fallback_memory.get(key)
+
+    async def clear_session_summary(self, session_id: str) -> None:
+        """Clears the cached conversation summary for a session."""
+        key = f"sentio:session:{session_id}:summary"
+        client = await self.get_client()
+        if client:
+            try:
+                await client.delete(key)
+                return
+            except Exception as e:
+                logger.warning(f"[RedisService] Failed to delete summary: {e}")
+        self._fallback_memory.pop(key, None)
+
     # ── Session Profile Cache ─────────────────────────────────────────────────
 
     async def set_session_profile(

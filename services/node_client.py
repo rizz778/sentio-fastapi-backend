@@ -60,24 +60,64 @@ class NodeBackendClient:
                 logger.warning(f"[NodeClient] Failed to fetch profile from {url}: {repr(e)}")
         return None
 
-    async def fetch_session_messages(
+    async def fetch_session_data(
         self, session_id: str, auth_token: Optional[str] = None, user_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """Fetches prior messages for a session (used for rehydration on failover)."""
+    ) -> Optional[Dict[str, Any]]:
+        """Fetches full session data (messages, conversationSummary) from Node backend."""
         headers = self._build_headers(auth_token=auth_token, user_id=user_id)
         for url in self._get_candidate_urls(f"api/chat/sessions/{session_id}"):
             try:
                 async with httpx.AsyncClient(timeout=3.0) as client:
                     res = await client.get(url, headers=headers)
                     if res.status_code == 200:
-                        data = res.json()
-                        return data.get("messages", [])
+                        return res.json()
                     logger.warning(
-                        f"[NodeClient] Session fetch returned {res.status_code} for session {session_id}"
+                        f"[NodeClient] Session data fetch returned {res.status_code} for session {session_id}"
                     )
             except Exception as e:
-                logger.warning(f"[NodeClient] Failed to fetch messages from {url}: {repr(e)}")
+                logger.warning(f"[NodeClient] Failed to fetch session data from {url}: {repr(e)}")
+        return None
+
+    async def fetch_session_messages(
+        self, session_id: str, auth_token: Optional[str] = None, user_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Fetches prior messages for a session (used for rehydration on failover)."""
+        data = await self.fetch_session_data(session_id=session_id, auth_token=auth_token, user_id=user_id)
+        if data and isinstance(data, dict):
+            return data.get("messages", [])
         return []
+
+    async def patch_session_summary(
+        self,
+        session_id: str,
+        summary: str,
+        auth_token: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> bool:
+        """Updates the conversation summary in MongoDB via Node backend (cache write-back)."""
+        headers = self._build_headers(auth_token=auth_token, user_id=user_id)
+        payload = {"summary": summary}
+        candidate_urls = self._get_candidate_urls(f"api/chat/sessions/{session_id}/summary")
+
+        for url in candidate_urls:
+            for attempt in range(2):
+                try:
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        res = await client.patch(url, json=payload, headers=headers)
+                        if res.status_code == 200:
+                            logger.info(
+                                f"[NodeClient] Summary persisted to MongoDB for session {session_id} ({len(summary)} chars)"
+                            )
+                            return True
+                        elif 400 <= res.status_code < 500:
+                            logger.warning(
+                                f"[NodeClient] Patch summary rejected ({res.status_code}) for session {session_id}: {res.text}"
+                            )
+                            return False
+                except Exception as e:
+                    logger.warning(f"[NodeClient] Patch summary attempt failed ({url}): {repr(e)}")
+                    await asyncio.sleep(0.15)
+        return False
 
     async def _send_message_task(
         self,
