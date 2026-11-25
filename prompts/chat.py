@@ -71,7 +71,7 @@ def format_user_profile(user_profile: Optional[Dict[str, Any]]) -> str:
         ("Preferred response style", user_profile.get("responsePreference") or user_profile.get("responseStyle")),
         ("Preferences", user_profile.get("preferences")),
         ("Diagnosed condition (sensitive)", user_profile.get("diagnosedCondition")),
-        ("Current emotion (detected, may be wrong)", user_profile.get("currentMood")),
+        # ("Current emotion (detected, may be wrong)", user_profile.get("currentMood")),
     ]
     # Skip unknown fields entirely so the model is not nudged by "Unknown".
     lines = [f"- {k}: {_clean(v)}" for k, v in fields if _clean(v)]
