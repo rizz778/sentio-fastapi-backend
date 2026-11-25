@@ -1,5 +1,7 @@
 from typing import Any, Dict, List, Optional
 
+# we have to improve upon this for better user response generation
+
 EMPATHY_INSTRUCTION = (
     "Whenever you receive a user's current emotion, always acknowledge it explicitly in your reply, "
     "mention the emotion, and respond with empathy and support tailored to that emotion. Never ignore the user's emotion."
@@ -47,7 +49,8 @@ def format_user_profile(user_profile: Dict[str, Any]) -> str:
         profile_parts.append(f"Current Mood: {current_mood}.")
     if preferences:
         profile_parts.append(f"Preferences: {preferences}.")
-
+    # we have to improve upon the prompt
+    
     profile_parts.extend([
         "You MUST use this information when answering questions about the user.",
         "If the user asks for their name, always use the name from the profile above.",

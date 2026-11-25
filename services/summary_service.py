@@ -13,32 +13,11 @@ import logging
 from typing import Optional
 from google import genai
 from core.config import settings
+from prompts.summary import build_summary_prompt
 from services.redis_service import redis_service
 from services.node_client import node_client
 
 logger = logging.getLogger(__name__)
-
-SUMMARY_PROMPT_TEMPLATE = """You are an expert clinical summarizer for Sentio AI Therapy.
-Your task is to produce an updated, highly condensed rolling summary of the ongoing therapy session incorporating the latest exchange between the client and therapist.
-
-Current Running Summary:
-{existing_summary}
-
-Latest Turn:
-Client: {user_text}
-Therapist: {model_text}
-
-Instructions:
-1. Keep the summary under 180 words.
-2. Focus on:
-   - Core emotional states and trajectory (e.g., anxiety shifting to relief).
-   - Key distress triggers and stressors mentioned.
-   - Coping mechanisms or strategies explored/recommended.
-   - Goals or unresolved issues discussed.
-3. Discard polite chit-chat, greetings, small talk, and repetitive phrasing.
-4. Use objective, concise third-person present tense (e.g., "Client shares feelings of exhaustion due to work deadlines...").
-5. Return ONLY the plain text summary without any markdown headers, quotes, bullet titles, or meta-commentary.
-"""
 
 
 class SummaryService:
@@ -70,12 +49,10 @@ class SummaryService:
             return existing_summary
 
         fallback_summary = existing_summary.strip()
-        prior_context = fallback_summary if fallback_summary else "No prior summary. This is the start of the session."
-
-        prompt = SUMMARY_PROMPT_TEMPLATE.format(
-            existing_summary=prior_context,
-            user_text=user_text.strip(),
-            model_text=model_text.strip(),
+        prompt = build_summary_prompt(
+            existing_summary=fallback_summary,
+            user_text=user_text,
+            model_text=model_text,
         )
 
         try:
