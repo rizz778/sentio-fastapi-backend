@@ -16,9 +16,9 @@ import time
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 from services.redis_service import redis_service
-from services.node_client import node_client
 from services.distress_service import distress_service
-from services.summary_service import summary_service
+from services.memory_service import memory_service
+from clients.node.session import session_client as node_client
 
 logger = logging.getLogger(__name__)
 
@@ -132,10 +132,10 @@ class TurnProcessor:
                     last_user_text = msg.get("text", "")
                     break
 
-            # Trigger asynchronous rolling conversation summary update (cache write-back)
+            # Trigger asynchronous consolidated memory consolidation (session summary + episodic memory gatekeeper)
             if last_user_text or text:
                 asyncio.create_task(
-                    summary_service.update_summary_async(
+                    memory_service.consolidate_memory_async(
                         session_id=session_id,
                         user_text=last_user_text,
                         model_text=text,
@@ -145,7 +145,7 @@ class TurnProcessor:
                 )
 
             logger.debug(
-                f"[TurnProcessor] Model turn persisted & summary task queued for session={session_id}"
+                f"[TurnProcessor] Model turn persisted & memory consolidation queued for session={session_id}"
             )
 
         except Exception as e:
