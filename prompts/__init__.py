@@ -1,10 +1,9 @@
 from prompts.chat import build_chat_system_instruction
 from prompts.distress import build_distress_prompt
-from prompts.summary import build_summary_prompt, SUMMARY_PROMPT_TEMPLATE
+from prompts.memory_consolidation import build_memory_consolidation_prompt
 
 __all__ = [
     "build_chat_system_instruction",
     "build_distress_prompt",
-    "build_summary_prompt",
-    "SUMMARY_PROMPT_TEMPLATE",
+    "build_memory_consolidation_prompt",
 ]
