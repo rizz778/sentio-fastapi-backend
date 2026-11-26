@@ -15,6 +15,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 from google import genai
+from google.genai import types
 from core.config import settings
 from prompts.memory_consolidation import build_memory_consolidation_prompt
 from services.redis_service import redis_service
@@ -33,20 +34,24 @@ class MemoryService:
         self._client: Optional[genai.Client] = None
 
     def _get_client(self) -> Optional[genai.Client]:
-        """Lazy initialization of the Google GenAI client."""
+        """Lazy initialization of the Google GenAI client with explicit API version."""
         if self._client is None:
             api_key = settings.GEMINI_API_KEY
             if not api_key:
                 logger.warning("[MemoryService] GEMINI_API_KEY is not set.")
                 return None
-            self._client = genai.Client(api_key=api_key)
+            api_version = getattr(settings, "GEMINI_API_VERSION", "v1beta") or "v1beta"
+            self._client = genai.Client(
+                api_key=api_key,
+                http_options=types.HttpOptions(api_version=api_version),
+            )
         return self._client
 
     # ── Vector Embeddings ───────────────────────────────────────────────────────
 
     def embed_text(self, text: str) -> List[float]:
         """
-        Synchronously generates a 768-dimensional float embedding using text-embedding-004.
+        Synchronously generates a 768-dimensional float embedding using Gemini embedding model.
         """
         if not text or not text.strip():
             return []
@@ -55,20 +60,45 @@ class MemoryService:
         if not client:
             return []
 
-        try:
-            response = client.models.embed_content(
-                model=settings.GEMINI_EMBEDDING_MODEL,
-                contents=text.strip(),
-            )
-            if response.embeddings and len(response.embeddings) > 0:
-                values = response.embeddings[0].values
-                if values and isinstance(values, list):
-                    return values
-            logger.warning("[MemoryService] Empty embedding returned from Gemini.")
-            return []
-        except Exception as e:
-            logger.error(f"[MemoryService] Failed to generate embedding: {e}", exc_info=True)
-            return []
+        target_model = getattr(settings, "GEMINI_EMBEDDING_MODEL", "gemini-embedding-001") or "gemini-embedding-001"
+        candidate_models = [target_model, "gemini-embedding-001", "models/gemini-embedding-001"]
+        # Remove duplicates while preserving order
+        candidate_models = list(dict.fromkeys(candidate_models))
+
+        for model_name in candidate_models:
+            # 1. Try with output_dimensionality=768 for compact vector indexing
+            try:
+                response = client.models.embed_content(
+                    model=model_name,
+                    contents=text.strip(),
+                    config=types.EmbedContentConfig(output_dimensionality=768),
+                )
+                if response.embeddings and len(response.embeddings) > 0:
+                    values = response.embeddings[0].values
+                    if values and isinstance(values, list):
+                        logger.debug(f"[MemoryService] Generated {len(values)}-dim embedding with '{model_name}'")
+                        return values
+            except Exception as e:
+                logger.debug(f"[MemoryService] Configured embedding attempt with '{model_name}' failed: {e}")
+
+            # 2. Fallback without config
+            try:
+                response = client.models.embed_content(
+                    model=model_name,
+                    contents=text.strip(),
+                )
+                if response.embeddings and len(response.embeddings) > 0:
+                    values = response.embeddings[0].values
+                    if values and isinstance(values, list):
+                        logger.debug(f"[MemoryService] Generated standard embedding with '{model_name}'")
+                        return values
+            except Exception as e:
+                logger.warning(
+                    f"[MemoryService] Embedding generation attempt with '{model_name}' failed: {e}"
+                )
+
+        logger.error(f"[MemoryService] All embedding attempts failed for text ({len(text)} chars)")
+        return []
 
     async def embed_text_async(self, text: str) -> List[float]:
         """Asynchronous wrapper for vector embedding generation."""

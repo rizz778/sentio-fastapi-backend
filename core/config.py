@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     GEMINI_AUDIO_MODEL: str = "gemini-3.8-live"
     GEMINI_DISTRESS_MODEL: str = "gemini-3.5-flash-lite"
     GEMINI_VISION_MODEL: str = "gemini-3.8-flash"
-    GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     GEMINI_VOICE_NAME: str = "Puck"
     DEFAULT_SYSTEM_INSTRUCTION: str = "You are a Therapist"
     DISTRESS_API_KEY: Optional[str] = None

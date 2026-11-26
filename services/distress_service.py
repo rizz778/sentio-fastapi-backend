@@ -11,6 +11,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 from google import genai
+from google.genai import types
 from core.config import settings
 from prompts.distress import build_distress_prompt
 
@@ -34,7 +35,11 @@ class DistressService:
             if not api_key:
                 logger.warning("[DistressService] No API key configured for distress scoring.")
                 return None
-            self._client = genai.Client(api_key=api_key)
+            api_version = getattr(settings, "GEMINI_API_VERSION", "v1beta") or "v1beta"
+            self._client = genai.Client(
+                api_key=api_key,
+                http_options=types.HttpOptions(api_version=api_version),
+            )
         return self._client
 
     def assess_distress_and_emotion_sync(
