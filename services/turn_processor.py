@@ -46,29 +46,27 @@ class TurnProcessor:
                 timestamp_ms / 1000.0, datetime.timezone.utc
             ).isoformat()
 
-            # 1. Snapshot running facial emotion from Redis
-            emotion_data = await redis_service.get_user_emotion(user_id)
-            emotion = emotion_data.get("emotion", "neutral") if emotion_data else "neutral"
+            # 1. Get current sliding window from Redis for context
+            sliding_window = await redis_service.get_sliding_window(session_id)
 
-            # 2. Persist user message to MongoDB IMMEDIATELY so quick reloads never lose it
+            # 2. Compute text distress score & categorized emotion asynchronously in a single call
+            assessment = await distress_service.assess_turn(text, sliding_window)
+            distress_score = assessment.get("distressScore", 0.0)
+            emotion = assessment.get("emotion", "neutral")
+
+            # 3. Persist user message to MongoDB with text-evaluated emotion and distress score
             node_client.fire_and_forget_persist(
                 session_id=session_id,
                 sender="user",
                 text=text,
                 emotion=emotion,
-                distress_score=0.0,
+                distress_score=distress_score,
                 auth_token=auth_token,
                 user_id=user_id,
                 timestamp=user_iso_timestamp,
             )
 
-            # 3. Get current sliding window from Redis for context
-            sliding_window = await redis_service.get_sliding_window(session_id)
-
-            # 4. Compute distress score asynchronously
-            distress_score = await distress_service.score_distress(text, sliding_window)
-
-            # 5. Push user message with distress score into Redis sliding window
+            # 4. Push user message with distress score and emotion into Redis sliding window
             enriched_user_msg = {
                 "sender": "user",
                 "text": text,
@@ -78,7 +76,7 @@ class TurnProcessor:
             }
             await redis_service.push_sliding_message(session_id, enriched_user_msg)
 
-            # 6. Notify callback to push DistressUpdate over gRPC to client
+            # 5. Notify callback to push DistressUpdate over gRPC to client
             await on_distress_ready(distress_score, emotion, timestamp_ms)
 
             logger.info(

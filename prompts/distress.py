@@ -1,14 +1,11 @@
 from typing import Any, List, Optional
 
-DISTRESS_ASSESSMENT_PROMPT_TEMPLATE = """You are an expert mental health assessment assistant. Your task is to evaluate the user's current level of emotional distress based on their latest message and the recent conversation history.
+DISTRESS_ASSESSMENT_PROMPT_TEMPLATE = """You are an expert mental health assessment assistant. Your task is to evaluate the user's current level of emotional distress and identify their primary emotional state based on their latest message and the recent conversation history.
 
 Instructions:
 - Carefully consider the user's most recent input as well as the context provided by the conversation history.
 - Pay attention to signs of emotional intensity, negative language, hopelessness, anxiety, or any mention of self-harm or crisis.
 - Consider both explicit statements and subtle cues in the user's language.
-- If the user appears calm, positive, or neutral, assign a lower score.
-- If the user expresses severe distress, hopelessness, or risk of harm, assign a higher score.
-- Use the conversation history to understand the user's emotional trajectory and whether their distress is increasing, decreasing, or stable.
 
 Scoring:
 - 0: Emotionally stable, calm, or positive.
@@ -17,13 +14,18 @@ Scoring:
 - 7-9: High distress, strong negative emotions, possible risk factors.
 - 10: Extreme distress, crisis, or immediate risk of harm.
 
-Respond ONLY with a single number between 0 and 10. Do not include any explanation or text.
+Emotion categorization:
+Classify the user's primary emotional state into exactly one of:
+["anxious", "sad", "angry", "fear", "happy", "surprise", "disgust", "neutral"]
 
 User Input:
 {text}
 
 Recent Conversation History:
 {conversation_history}
+
+Respond ONLY with valid JSON in this exact structure without markdown backticks or commentary:
+{{"distressScore": <number between 0 and 10>, "emotion": "<emotion>"}}
 """
 
 
