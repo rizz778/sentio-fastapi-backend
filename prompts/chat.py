@@ -87,6 +87,37 @@ def format_conversation_summary(summary: Optional[str]) -> str:
         "[Session summary so far. Background only, not something to quote]\n"
         + summary.strip()
     )
+
+
+def format_unresolved_episodes(
+    unresolved_episodes: Optional[List[Dict[str, Any]]]
+) -> str:
+    """Formats ongoing or unresolved past memories so the therapist is mindfully aware of lingering struggles."""
+    if not unresolved_episodes or not isinstance(unresolved_episodes, list):
+        return ""
+    lines = []
+    for ep in unresolved_episodes:
+        summary = (ep.get("eventSummary") or "").strip()
+        if not summary:
+            continue
+        emotions = ", ".join(ep.get("dominantEmotions") or [])
+        status = ep.get("resolutionStatus") or "unresolved"
+        coping = ep.get("copingAttempted") or ""
+        item = f"- [{status.upper()}] {summary}"
+        if emotions:
+            item += f" (Emotions: {emotions})"
+        if coping:
+            item += f" (Coping: {coping})"
+        lines.append(item)
+
+    if not lines:
+        return ""
+    return (
+        "[Unresolved Past Life Events & Open Struggles]\n"
+        "The person previously experienced these significant events which remain open or unresolved.\n"
+        "Be gently and compassionately aware of them. If opening a new session, follow up with warmth:\n"
+        + "\n".join(lines)
+    )
  
  
 def format_conversation_history(
@@ -118,6 +149,7 @@ def build_chat_system_instruction(
     user_profile: Optional[Dict[str, Any]] = None,
     conversation_summary: Optional[str] = None,
     conversation_history: Optional[List[Dict[str, Any]]] = None,
+    unresolved_episodes: Optional[List[Dict[str, Any]]] = None,
     custom_instruction: Optional[str] = None,
     history_limit: int = 5,
 ) -> str:
@@ -125,6 +157,7 @@ def build_chat_system_instruction(
         BASE_SYSTEM_PROMPT,
         format_user_profile(user_profile),
         format_conversation_summary(conversation_summary),
+        format_unresolved_episodes(unresolved_episodes),
         format_conversation_history(conversation_history, limit=history_limit),
         custom_instruction or "",
     ]

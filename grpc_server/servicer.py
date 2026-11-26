@@ -9,8 +9,9 @@ from core.config import settings
 from prompts.chat import build_chat_system_instruction
 from services.gemini_live_service import GeminiLiveSession
 from services.redis_service import redis_service
-from services.node_client import node_client
+from clients.node import session_client as node_client
 from services.turn_processor import turn_processor
+from services.memory_service import memory_service
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +193,7 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                             f"modalities={response_modalities}, voice={voice_name}"
                         )
 
-                        # 1. Parallel fetch/cache of user profile, session history, rolling summary, and resume handle
+                        # 1. Parallel fetch/cache of user profile, session history, rolling summary, resume handle, and unresolved memories
                         profile_task = asyncio.create_task(
                             self._resolve_user_profile(user_id, auth_token, session_id)
                         )
@@ -205,9 +206,12 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                         resume_handle_task = asyncio.create_task(
                             redis_service.get_gemini_resume_handle(session_id)
                         )
+                        unresolved_episodes_task = asyncio.create_task(
+                            memory_service.recall_unresolved_episodes(user_id, limit=3, auth_token=auth_token)
+                        )
 
-                        user_profile, prior_messages, conversation_summary, resume_handle = await asyncio.gather(
-                            profile_task, history_task, summary_task, resume_handle_task
+                        user_profile, prior_messages, conversation_summary, resume_handle, unresolved_episodes = await asyncio.gather(
+                            profile_task, history_task, summary_task, resume_handle_task, unresolved_episodes_task
                         )
 
                         profile_name = None
@@ -215,16 +219,18 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                             p_data = user_profile.get("userProfile") if isinstance(user_profile.get("userProfile"), dict) else user_profile
                             profile_name = p_data.get("name")
                         logger.info(
-                            f"[gRPC] Resolved user profile for session={session_id}: name={profile_name}, "
+                            f"[gRPC] Resolved context for session={session_id}: name={profile_name}, "
                             f"keys={list(user_profile.keys()) if isinstance(user_profile, dict) else None}, "
-                            f"has_summary={bool(conversation_summary)}, prior_messages={len(prior_messages)}"
+                            f"has_summary={bool(conversation_summary)}, prior_messages={len(prior_messages)}, "
+                            f"unresolved_memories={len(unresolved_episodes)}"
                         )
 
-                        # 2. Build system instruction from FastAPI config and user profile
+                        # 2. Build system instruction with proactive unresolved memories injection
                         system_instruction = build_chat_system_instruction(
                             user_profile=user_profile,
                             conversation_summary=conversation_summary,
                             conversation_history=prior_messages,
+                            unresolved_episodes=unresolved_episodes,
                             custom_instruction=settings.DEFAULT_SYSTEM_INSTRUCTION,
                         )
 
@@ -233,6 +239,7 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                             session_id=session_id,
                             user_id=user_id,
                             on_event=handle_gemini_event,
+                            auth_token=auth_token,
                         )
 
                         # Connect opens session, applies client config, and injects Redis history.
@@ -272,6 +279,15 @@ class SentioLiveGatewayServicer(pb2_grpc.SentioLiveGatewayServicer):
                             )
                         )
                         await outbound_queue.put(ready_event)
+
+                        # 5. Proactive opening greeting acknowledging unresolved struggles on new sessions
+                        if len(prior_messages) == 0 and not resume_handle:
+                            asyncio.create_task(
+                                gemini_session.kickoff_greeting(
+                                    unresolved_episodes=unresolved_episodes,
+                                    user_name=profile_name,
+                                )
+                            )
 
                     elif payload_field == "audio_chunk":
                         audio = client_event.audio_chunk

@@ -24,6 +24,8 @@ from google.genai import types
 from core.config import settings
 from prompts.chat import build_chat_system_instruction
 from services.redis_service import redis_service
+from tools.definitions import get_tool_declarations
+from tools.dispatcher import tool_dispatcher
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +43,14 @@ class GeminiLiveSession:
         on_event: Callable[[Dict[str, Any]], Any],
         api_key: Optional[str] = None,
         model: Optional[str] = None,
+        auth_token: Optional[str] = None,
     ):
         self.session_id = session_id
         self.user_id = user_id
         self.on_event = on_event
         self.api_key = api_key or settings.GEMINI_API_KEY
         self.model = model
+        self.auth_token = auth_token
 
         self._client: Optional[genai.Client] = None
         self._session: Any = None
@@ -179,6 +183,11 @@ class GeminiLiveSession:
             ),
         }
 
+        # Register therapeutic agent tools (memory retrieval & status updates)
+        tool_declarations = get_tool_declarations()
+        if tool_declarations:
+            config_kwargs["tools"] = [types.Tool(function_declarations=tool_declarations)]
+
         # Attach session resumption handle if rehydrating
         if resume_handle:
             config_kwargs["session_resumption"] = types.SessionResumptionConfig(
@@ -287,19 +296,45 @@ class GeminiLiveSession:
         except Exception as e:
             logger.error(f"[GeminiLive] Text send failed for {self.session_id}: {e}")
 
-    async def inject_emotion_context(self, emotion: str) -> None:
-        """Silently injects an emotion shift cue into the conversation context."""
-        if self._closed or not self.is_connected:
+    
+    async def kickoff_greeting(
+        self,
+        unresolved_episodes: Optional[List[Dict[str, Any]]] = None,
+        user_name: Optional[str] = None,
+    ) -> None:
+        """
+        Sends an initial directive so Gemini Live proactively speaks first with an empathetic
+        greeting, gently acknowledging any open struggles from past sessions.
+        """
+        if self._closed:
             return
-        context_text = (
-            f"[System Context: User's facial expression now shows '{emotion}'. "
-            f"Adapt your tone and response with appropriate empathy.]"
-        )
+        await self.ensure_connected()
+        if not self._session:
+            return
+
+        greeting_prompt = "[System event: The session is beginning. "
+        if user_name:
+            greeting_prompt += f"The person's name is {user_name}. "
+        if unresolved_episodes and len(unresolved_episodes) > 0:
+            greeting_prompt += (
+                "Warmly welcome the person and compassionately check in on how they are feeling today, "
+                "mindfully referencing their open situation without being abrupt or clinical."
+            )
+        else:
+            greeting_prompt += "Warmly welcome the person and invite them to share how they are doing today."
+        greeting_prompt += " Please speak your opening greeting now.]"
+
         try:
-            await self._session.send_realtime_input(text=context_text)
-            self._last_activity_time = time.time()
+            turns = [
+                types.Content(
+                    role="user",
+                    parts=[types.Part.from_text(text=greeting_prompt)],
+                )
+            ]
+            await self._session.send_client_content(turns=turns, turn_complete=True)
+            logger.info(f"[GeminiLive] Proactive opening greeting triggered for session {self.session_id}")
         except Exception as e:
-            logger.warning(f"[GeminiLive] Emotion context injection failed: {e}")
+            logger.warning(f"[GeminiLive] Failed to trigger kickoff greeting: {e}")
 
     # ── Response Listener ─────────────────────────────────────────────────────
 
@@ -337,6 +372,50 @@ class GeminiLiveSession:
                                 getattr(response.go_away, "time_left", "unknown")
                             ),
                         })
+                        continue
+
+                    # Tool call handling from Gemini Live agent
+                    tool_call = getattr(response, "tool_call", None)
+                    if tool_call and getattr(tool_call, "function_calls", None):
+                        function_responses = []
+                        for call in tool_call.function_calls:
+                            call_name = getattr(call, "name", "")
+                            call_id = getattr(call, "id", "")
+                            call_args = getattr(call, "args", {}) or {}
+                            logger.info(
+                                f"[GeminiLive] Tool call invoked: {call_name} (id={call_id}) args={call_args}"
+                            )
+                            try:
+                                dispatch_res = await tool_dispatcher.dispatch(
+                                    tool_name=call_name,
+                                    args=call_args,
+                                    context={
+                                        "user_id": self.user_id,
+                                        "session_id": self.session_id,
+                                        "auth_token": self.auth_token,
+                                    },
+                                )
+                                result_payload = dispatch_res.get("result", dispatch_res)
+                                function_responses.append(
+                                    types.FunctionResponse(
+                                        name=call_name,
+                                        id=call_id,
+                                        response=result_payload if isinstance(result_payload, dict) else {"output": result_payload},
+                                    )
+                                )
+                            except Exception as call_err:
+                                logger.error(f"[GeminiLive] Failed executing tool {call_name}: {call_err}", exc_info=True)
+                                function_responses.append(
+                                    types.FunctionResponse(
+                                        name=call_name,
+                                        id=call_id,
+                                        response={"error": str(call_err)},
+                                    )
+                                )
+
+                        if function_responses:
+                            await self._session.send_tool_response(function_responses=function_responses)
+                            logger.info(f"[GeminiLive] Sent {len(function_responses)} tool response(s) back to Gemini Live")
                         continue
 
                     # Server content (audio, transcripts, generation status)
